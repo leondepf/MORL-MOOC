@@ -130,7 +130,7 @@ def train(env, agent, args):
                 self.agent.save_weight()
         '''
 
-        ## TODO: 修改predict函数的参数
+        ## TODO: 修改predict函数的参数,应该把agent.w_kept传进去
         _, q = agent.predict(state, probe)
         if args.env_name == "dst":
             act_1 = q[0, 3]
