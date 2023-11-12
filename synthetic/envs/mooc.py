@@ -30,7 +30,7 @@ class MOOC_Env():
         self.timestep = 1 ##当前时间步,并不是强化学习中的状态
         self.done = False
         ## TODO: 这个reward需要调整
-        self.reward = [[0, 14], [-1, 0]]
+        self.reward = [[0, 1], [1, 0]]
         self.param_lambda = 0.001
         self.param_p = 1/3
 
@@ -50,12 +50,12 @@ class MOOC_Env():
                 if self.sequence["label"]+1 == 1:
                     acc_reward = 1
                     time_penalty = 1.0 / self.timestep
+                    
                     self.reward = np.array([acc_reward, time_penalty])
                 else:
                     acc_reward = -1
                     time_penalty = 1.0 / self.timestep
                     self.reward = np.array([acc_reward, time_penalty])
-            
             self.done = True
    
         if action == 2:  
@@ -83,8 +83,11 @@ class MOOC_Env():
     def set_label(self,label):
         self.sequence["label"] = label
             
-    def get_sequence_state(self):
-        return get_padding_sequence(self.sequence["data"], self.timestep) 
+    def get_sequence_state(self,timestep):
+        return get_padding_sequence(self.sequence["data"], timestep) 
+
+    # def get_next_sequence_state(self):
+    #     return get_padding_sequence(self.sequence["data"], self.timestep+1)
     
     def get_initial_sequence(self):
         return self.sequence["data"]

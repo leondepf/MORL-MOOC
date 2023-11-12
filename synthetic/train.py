@@ -58,10 +58,11 @@ Tensor = FloatTensor
 
 
 def train(env, agent, args):
-    monitor = Monitor(train=True, spec="-{}".format(args.method))
-    monitor.init_log(args.log, "m.{}_e.{}_n.{}".format(args.model, args.env_name, args.name))
+    # monitor = Monitor(train=True, spec="-{}".format(args.method))
+    # monitor.init_log(args.log, "m.{}_e.{}_n.{}".format(args.model, args.env_name, args.name))
     
     for num_eps in range(args.episode_num):
+        ## 取出一个人的序列
         index_random_data = random.randint(0,env.x_train.shape[0]-1)
         seq = env.x_train[index_random_data]
         seq_label = env.y_train[index_random_data]
@@ -69,7 +70,6 @@ def train(env, agent, args):
 
         terminal = False
         loss = 0
-        cnt = 0
         tot_reward = 0
         timestep = 1 #time_to_begin
 
@@ -82,29 +82,27 @@ def train(env, agent, args):
             probe = FloatTensor([0.3, 0.7])
 
         while not terminal and timestep <= env.x_train.shape[1]:
-            state = env.observe() ## (35, 22)
+            state = env.get_sequence_state(timestep) ## (35, 22)
             action = agent.act(state, timestep)
             next_timestep, reward, terminal = env.step(action) ##这个next_state返回的是当前的时间步
-            if args.log:
-                monitor.add_log(state, action, reward, terminal, agent.w_kept)
+            # if args.log:
+            #     monitor.add_log(state, action, reward, terminal, agent.w_kept)
             
-            next_state = env.get_sequence_state()  ##
+            next_state = env.get_sequence_state(next_timestep)  ##如果不是等待，则next_state和state相同
             # next_state = np.reshape(next_state,(1, env.x_train.shape[1], env.x_train.shape[2], 1))
      
             agent.memorize(state, action, next_state, reward, terminal)
             ## TODO: 是否需要根据action的类型进行分类存储？
             ## agent.remember(state, action, reward, next_state, terminal)
             
-            # state = next_state
             loss += agent.learn()
 
             ## TODO：这个if应该可以删掉
-            if cnt > 35:
+            if timestep > 35:
                 terminal = True
                 agent.reset()
 
-            tot_reward = tot_reward + (probe.cpu().numpy().dot(reward)) * np.power(args.gamma, cnt)
-            cnt = cnt + 1
+            tot_reward = tot_reward + (probe.cpu().numpy().dot(reward)) * np.power(args.gamma, timestep)
             timestep += 1
 
         ## TODO: 评估部分
@@ -164,12 +162,12 @@ def train(env, agent, args):
             act_2,
             # q__max,
             loss / cnt))
-        monitor.update(num_eps,
-                       tot_reward,
-                       act_1,
-                       act_2,
-                       #    q__max,
-                       loss / cnt)
+        # monitor.update(num_eps,
+        #                tot_reward,
+        #                act_1,
+        #                act_2,
+        #                #    q__max,
+        #                loss / cnt)
     
     agent.save(args.save, "m.{}_e.{}_n.{}".format(args.model, args.env_name, args.name))
 
@@ -182,8 +180,10 @@ if __name__ == '__main__':
     # env = MOOC_Env() ##action, states, sequence, label
 
     # get state / action / reward sizes
-    state_size = len(env.state_spec) ## 34
-    action_size = len(env.action_spec) ## 3
+    # state_size = len(env.state_spec) ## 34
+    # action_size = len(env.action_spec) ## 3
+    state_size = env.state_size ## 35
+    action_size = env.action_size ## 3
     reward_size = len(env.reward_spec) ## 2
 
     # generate an agent for initial training

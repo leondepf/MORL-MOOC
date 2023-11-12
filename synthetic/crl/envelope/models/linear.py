@@ -108,7 +108,7 @@ class EnvelopeLinearCQN(torch.nn.Module):
 class EnvelopeCNN(nn.Module):
     def __init__(self, state_size, action_size, reward_size):
         super(EnvelopeCNN, self).__init__()
-        self.state_size = state_size  ## 34
+        self.state_size = state_size  ## 35
         self.action_size = action_size ## 3
         self.reward_size = reward_size ## 2
 
@@ -163,7 +163,7 @@ class EnvelopeCNN(nn.Module):
         x = x.unsqueeze(x.dim()) ## torch.Size([1, 35, 24, 1])
         # x = x.unsqueeze(-1)
 
-        x = self.conv1(x) ## torch.Size([1, 128, 24, 1])
+        x = self.conv1(x) ## torch.Size([1, 128, 24, 1])，是不是应该在特征维度上处理？
         x = self.bn1(x)
         x = F.relu(x)
         x = F.dropout(x, p=0.2)
@@ -179,7 +179,7 @@ class EnvelopeCNN(nn.Module):
         x = x.view(-1, 128) ## torch.Size([1, 128])
         q = self.fc(x) ## torch.Size([1, 6])
 
-        ##TODO: 检查q的shape
+        ##TODO: [1, 6]reshape到[1, 3, 2]后，能代表3个action的2个reward吗？
         q = q.view(q.size(0), self.action_size, self.reward_size) ## torch.Size([1, 3, 2])
 
         # hq = self.H(q.detach().view(-1, self.reward_size), preference, s_num, w_num)
