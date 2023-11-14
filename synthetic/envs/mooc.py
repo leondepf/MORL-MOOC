@@ -36,38 +36,41 @@ class MOOC_Env():
 
         
     def step(self, action):
-        if action == 0:  
+        if action == 0:  ## wait
             if not self.done and self.timestep < len(self.sequence["data"]):
-                ## TODO: 将这个reward修改为arrary形式
                 acc_reward = 0
-                time_penalty = -(self.param_lambda * (self.timestep ** self.param_p))
+                time_penalty = -(self.param_lambda * (self.timestep ** self.param_p)) ## timestep越大，时间奖励越小
                 self.reward = np.array([acc_reward, time_penalty])
                 self.timestep = self.timestep + 1 ##时间步加1，即进入下一个时间步
                 
-        if action == 1:  
+        if action == 1: ## predict, real_label=0
             if not self.done and self.timestep <= len(self.sequence["data"]):
                 # if self.sequence["label"] == 1:
-                if self.sequence["label"]+1 == 1:
+                if self.sequence["label"]+1 == 1: ## 等号后面的1代表action
                     acc_reward = 1
-                    time_penalty = 1.0 / self.timestep
-                    
+                    # time_penalty = 1.0 / self.timestep
+                    # time_penalty = 1.0 
+                    time_penalty = 0 
                     self.reward = np.array([acc_reward, time_penalty])
                 else:
                     acc_reward = -1
-                    time_penalty = 1.0 / self.timestep
+                    # time_penalty = 1.0 
+                    time_penalty = 0 
                     self.reward = np.array([acc_reward, time_penalty])
             self.done = True
    
-        if action == 2:  
+        if action == 2:  ## predict, real_label=1
             if not self.done and self.timestep <= len(self.sequence["data"]):
                 # if self.sequence["label"] == 2:
-                if self.sequence["label"]+1 == 2:
+                if self.sequence["label"]+1 == 2:  ## 等号后面的2代表action
                     acc_reward = 1
-                    time_penalty = 1.0 / self.timestep
+                    # time_penalty = 1.0 
+                    time_penalty = 0 
                     self.reward = np.array([acc_reward, time_penalty])
                 else:
                     acc_reward = -1
-                    time_penalty = 1.0 / self.timestep
+                    # time_penalty = 1.0  
+                    time_penalty = 0 
                     self.reward = np.array([acc_reward, time_penalty])
             self.done = True
      
@@ -83,7 +86,7 @@ class MOOC_Env():
     def set_label(self,label):
         self.sequence["label"] = label
             
-    def get_sequence_state(self,timestep):
+    def get_sequence_state(self, timestep):
         return get_padding_sequence(self.sequence["data"], timestep) 
 
     # def get_next_sequence_state(self):

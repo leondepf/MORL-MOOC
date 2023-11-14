@@ -49,6 +49,10 @@ class MetaAgent(object):
         self.beta_expbase    = float(np.power(self.tau*(self.beta_uplim-self.beta), 1./args.episode_num))
         self.beta_delta      = self.beta_expbase / self.tau
 
+        self.exploration_rate   = 0.5
+        self.exploration_min    = 0.01
+        self.exploration_decay  = 0.995
+
         self.trans_mem = deque()
         self.trans = namedtuple('trans', ['s', 'a', 's_', 'r', 'd'])
         self.priority_mem = deque()
@@ -78,45 +82,49 @@ class MetaAgent(object):
 
 
     def act(self, state, index, preference=None):
-        if index < self.state_size:
-            # if np.random.rand() <= self.epsilon:
-            #     return random.randrange(self.action_size)  
-            
-            # random pick a preference if it is not specified
-            if preference is None:
-                if self.w_kept is None:
-                    self.w_kept = torch.randn(self.model_.reward_size)
-                    self.w_kept = (torch.abs(self.w_kept) / \
-                                torch.norm(self.w_kept, p=1)).type(FloatTensor)
-                preference = self.w_kept
-            state = torch.from_numpy(state).type(FloatTensor)
+        
+        # if np.random.rand() <= self.epsilon:
+        #     return random.randrange(self.action_size)  
+        
+        # random pick a preference if it is not specified
+        if preference is None:
+            if self.w_kept is None:
+                self.w_kept = torch.randn(self.model_.reward_size)
+                self.w_kept = (torch.abs(self.w_kept) / \
+                            torch.norm(self.w_kept, p=1)).type(FloatTensor)
+            preference = self.w_kept
+        state = torch.from_numpy(state).type(FloatTensor)
 
-            ##TODO：检查这里的输入输出shape
-            ##这里调用类EnvelopeCNN的forward函数，输入state和preference，输出Q值
-            _, Q = self.model_(
-                Variable(state.unsqueeze(0)), ##state.unsqueeze(0)的shape是[1, 35, 22]
-                Variable(preference.unsqueeze(0))) ##preference.unsqueeze(0)的shape是[1, 2]
-            ## Q: torch.Size([1, 3, 2])
+        ##TODO：检查这里的输入输出shape
+        ##这里调用类EnvelopeCNN的forward函数，输入state和preference，输出Q值
+        _, Q = self.model_(
+            Variable(state.unsqueeze(0)), ##state.unsqueeze(0)的shape是[1, 35, 22]
+            Variable(preference.unsqueeze(0))) ##preference.unsqueeze(0)的shape是[1, 2]
+        ## Q: torch.Size([1, 3, 2])
 
-            Q = Q.view(-1, self.model_.reward_size) ## torch.Size([3, 2])
+        Q = Q.view(-1, self.model_.reward_size) ## torch.Size([3, 2])
 
-            Q = torch.mv(Q.data, preference) ## torch.Size([3])
+        Q = torch.mv(Q.data, preference) ## torch.Size([3])
 
+        ## TODO
+        if np.random.rand() <= self.exploration_rate and self.is_train:
+            action = random.randrange(self.action_size) 
+        else:
             action = Q.max(0)[1].cpu().numpy() ##找到具有最大值的索引。max函数返回两个值：最大值和最大值的索引。只使用索引，该索引代表具有最高Q值的动作。
             action = int(action)
 
-            return action
+        return action
 
-        elif index == self.state_size:
-            # if np.random.rand() <= self.exploration_rate:
-            #     return random.randrange(self.action_size - 1) + 1  
+    
+        # if np.random.rand() <= self.exploration_rate:
+        #     action = random.randrange(self.action_size - 1) + 1  
 
-            if self.is_train and (len(self.trans_mem) < self.batch_size or \
-                                torch.rand(1)[0] < self.epsilon):
-                action = np.random.choice(self.model_.action_size, 1)[0]
-                action = int(action)
+        # if self.is_train and (len(self.trans_mem) < self.batch_size or \
+        #                     torch.rand(1)[0] < self.epsilon):
+        # action = np.random.choice(self.model_.action_size, 1)[0]
+        # action = int(action)
 
-            return action
+        # return action
 
     def memorize(self, state, action, next_state, reward, terminal):
         self.trans_mem.append(self.trans(
@@ -148,7 +156,7 @@ class MetaAgent(object):
             ## 计算 next_state 的 Q_target
             
             ## TODO： AttributeError: 'int' object has no attribute 'data'，应该是跟next_state的shape有关
-            hq = hq.data[0]
+            hq = hq.data[0,action]
             whq = preference.dot(hq) ## 对预测的 Q_target 进行加权求和
             p = abs(wr + self.gamma * whq - wq) ## Eq(6), Q_target - Q_predict
         else:
@@ -159,7 +167,7 @@ class MetaAgent(object):
             if self.homotopy:
                 self.beta += self.beta_delta
                 self.beta_delta = (self.beta-self.beta_init)*self.beta_expbase+self.beta_init-self.beta
-            p = abs(wr - wq)
+            p = abs(wr - wq)  ## TDError
         p += 1e-5
 
         self.priority_mem.append(
@@ -222,8 +230,7 @@ class MetaAgent(object):
             action_size = self.model_.action_size
             reward_size = self.model_.reward_size
 
-            minibatch = self.sample(self.trans_mem, self.priority_mem, self.batch_size)
-            # minibatch = random.sample(self.trans_mem, self.batch_size)
+            minibatch = self.sample(self.trans_mem, self.priority_mem, self.batch_size)  ##优先采样
             batchify = lambda x: list(x) * self.weight_num
             state_batch = batchify(map(lambda x: x.s.unsqueeze(0), minibatch))
             action_batch = batchify(map(lambda x: LongTensor([x.a]), minibatch))
@@ -286,6 +293,9 @@ class MetaAgent(object):
                 param.grad.data.clamp_(-1, 1)
             self.optimizer.step()
 
+            if self.exploration_rate > self.exploration_min:
+                self.exploration_rate *= self.exploration_decay
+
             if self.update_count % self.update_freq == 0:
                 self.model.load_state_dict(self.model_.state_dict())
 
@@ -338,6 +348,8 @@ class MetaAgent(object):
         # print("update prefreence parameters to", pref_param)
 
         return pref_param
+    
+    
 
 
 # projection to simplex

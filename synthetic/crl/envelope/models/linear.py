@@ -112,7 +112,7 @@ class EnvelopeCNN(nn.Module):
         self.action_size = action_size ## 3
         self.reward_size = reward_size ## 2
 
-        ## 可将backbone换为 Conv1d 或 RNN/LSTM/Transformer
+        ## TODO：可将backbone换为 Conv1d 或 RNN/LSTM/Transformer
         self.conv1 = nn.Conv2d(in_channels=35, out_channels=128, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm2d(128)
         self.conv2 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, padding=1)
@@ -160,9 +160,10 @@ class EnvelopeCNN(nn.Module):
 
         x = torch.cat((x, preference), dim=-1)  ## torch.Size([1, 35, 24])
 
-        x = x.unsqueeze(x.dim()) ## torch.Size([1, 35, 24, 1])
+        x = x.unsqueeze(x.dim()) ## torch.Size([1, 35, 24, 1]) -> [1,1,35,24]
         # x = x.unsqueeze(-1)
 
+        ## TODO：操作维度需要调整, pool需要对time
         x = self.conv1(x) ## torch.Size([1, 128, 24, 1])，是不是应该在特征维度上处理？
         x = self.bn1(x)
         x = F.relu(x)

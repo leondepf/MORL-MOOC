@@ -20,7 +20,7 @@ class Monitor(object):
         self.value_window = None
         self.text_window = None
 
-    def update(self, eps, tot_reward, Act_1, Act_2, loss=None):
+    def update(self, eps, tot_reward, Act_0, Act_1, Act_2, loss=None):
         if self.train:
             self.vis.line(
                 X=torch.Tensor([eps]).cpu(),
@@ -30,15 +30,15 @@ class Monitor(object):
 
         if self.value_window == None:
             self.value_window = self.vis.line(X=torch.Tensor([eps]).cpu(),
-                                              Y=torch.Tensor([tot_reward, Act_1, Act_2]).unsqueeze(0).cpu(),
+                                              Y=torch.Tensor([tot_reward, Act_0, Act_1, Act_2]).unsqueeze(0).cpu(),
                                               opts=dict(xlabel='episode',
                                                         ylabel='scalarized Q value',
                                                         title='Value Dynamics' + self.spec,
-                                                        legend=['Total Reward', 'Act_1', 'Act_2']))
+                                                        legend=['Total Reward', 'Act_0', 'Act_1', 'Act_2']))
         else:
             self.vis.line(
                 X=torch.Tensor([eps]).cpu(),
-                Y=torch.Tensor([tot_reward, Act_1, Act_2]).unsqueeze(0).cpu(),
+                Y=torch.Tensor([tot_reward, Act_0, Act_1, Act_2]).unsqueeze(0).cpu(),
                 win=self.value_window,
                 update='append')
 

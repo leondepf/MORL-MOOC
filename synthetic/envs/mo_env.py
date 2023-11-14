@@ -59,9 +59,9 @@ class MultiObjectiveEnv(object):
         ''' reset the enviroment '''
         self.env.reset(sequence, label)
 
-    def observe(self):
-        ''' reset the enviroment '''
-        return self.env.get_sequence_state()
+    # def observe(self):
+    #     ''' reset the enviroment '''
+    #     return self.env.get_sequence_state()
 
     def step(self, action):
         ''' process one step transition (s, a) -> s'
@@ -69,8 +69,8 @@ class MultiObjectiveEnv(object):
         '''
         return self.env.step(action)
 
-    def get_sequence_state(self):
-        return self.env.get_sequence_state()
+    def get_sequence_state(self, timestep):
+        return self.env.get_sequence_state(timestep)
 
 
 if __name__ == "__main__":

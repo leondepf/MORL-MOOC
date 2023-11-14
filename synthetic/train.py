@@ -58,8 +58,8 @@ Tensor = FloatTensor
 
 
 def train(env, agent, args):
-    # monitor = Monitor(train=True, spec="-{}".format(args.method))
-    # monitor.init_log(args.log, "m.{}_e.{}_n.{}".format(args.model, args.env_name, args.name))
+    monitor = Monitor(train=True, spec="-{}".format(args.method))
+    monitor.init_log(args.log, "m.{}_e.{}_n.{}".format(args.model, args.env_name, args.name))
     
     for num_eps in range(args.episode_num):
         ## 取出一个人的序列
@@ -85,8 +85,8 @@ def train(env, agent, args):
             state = env.get_sequence_state(timestep) ## (35, 22)
             action = agent.act(state, timestep)
             next_timestep, reward, terminal = env.step(action) ##这个next_state返回的是当前的时间步
-            # if args.log:
-            #     monitor.add_log(state, action, reward, terminal, agent.w_kept)
+            if args.log:
+                monitor.add_log(state, action, reward, terminal, agent.w_kept)
             
             next_state = env.get_sequence_state(next_timestep)  ##如果不是等待，则next_state和state相同
             # next_state = np.reshape(next_state,(1, env.x_train.shape[1], env.x_train.shape[2], 1))
@@ -106,15 +106,14 @@ def train(env, agent, args):
             timestep += 1
 
         ## TODO: 评估部分
-        '''
-        if(index_episode%20==0):
-            print("Episode {}".format(index_episode))
-        if index_episode % 100==0 and index_episode != 0:
-            acc,res,t = self.agent.compute_acc_batched()
-            harmonic_mean_train = self.agent.harmonic_mean(acc,t)
+        # if(index_episode%20==0):
+        #     print("Episode {}".format(index_episode))
+        if num_eps % 100==0 and num_eps != 0:
+            acc,res,t = agent.compute_acc_batched()
+            harmonic_mean_train = agent.harmonic_mean(acc,t)
 
-            acc_val,res_val,t_val = self.agent.compute_acc_val_batched()
-            harmonic_mean_val = self.agent.harmonic_mean(acc_val,t_val)
+            acc_val,res_val,t_val = agent.compute_acc_val_batched()
+            harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
 
             # acc,res,t = self.agent.compute_acc()
             # acc_val,res_val,t_val = self.agent.compute_acc_val()
@@ -124,9 +123,9 @@ def train(env, agent, args):
             print("harmonic_mean_train {} ".format(harmonic_mean_train))
             print("acc_val {} ======> average_time_val {}% ======> update {}".format(acc_val, np.round(100.*t_val, 3), self.agent.update_number))  
             print("harmonic_mean_val {} ".format(harmonic_mean_val))
-            if acc > 0.9 :
-                self.agent.save_weight()
-        '''
+            # if acc > 0.9 :
+            #     self.agent.save_weight()
+        
 
         ## TODO: 修改predict函数的参数,应该把agent.w_kept传进去
         _, q = agent.predict(state, probe)
@@ -161,13 +160,14 @@ def train(env, agent, args):
             act_1,
             act_2,
             # q__max,
-            loss / cnt))
-        # monitor.update(num_eps,
-        #                tot_reward,
-        #                act_1,
-        #                act_2,
-        #                #    q__max,
-        #                loss / cnt)
+            loss / timestep))
+        monitor.update(num_eps,
+                       tot_reward,
+                       act_0, 
+                       act_1,
+                       act_2,
+                       #    q__max,
+                       loss / timestep)
     
     agent.save(args.save, "m.{}_e.{}_n.{}".format(args.model, args.env_name, args.name))
 
