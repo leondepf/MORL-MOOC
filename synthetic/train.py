@@ -95,6 +95,7 @@ def train(env, agent, args):
             ## TODO: 是否需要根据action的类型进行分类存储？
             ## agent.remember(state, action, reward, next_state, terminal)
             
+            ## 相当于 agent.replay()
             loss += agent.learn()
 
             ## TODO：这个if应该可以删掉

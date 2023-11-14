@@ -33,9 +33,15 @@ class MetaAgent(object):
         self.model_ = model
         self.is_train = is_train
         self.gamma = args.gamma
-        self.epsilon = args.epsilon
-        self.epsilon_decay = args.epsilon_decay
-        self.epsilon_delta = (args.epsilon - 0.05) / args.episode_num
+        self.epsilon = args.epsilon  ## 探索率
+        self.epsilon_decay = args.epsilon_decay  ## 探索率衰减，True/False
+        self.epsilon_min    = 0.01
+        self.epsilon_delta = (args.epsilon - self.epsilon_min) / args.episode_num
+        
+        
+        # self.exploration_rate   = 1.0
+        # self.exploration_min    = 0.01
+        # self.exploration_decay  = 0.995
 
         self.mem_size = args.mem_size
         self.batch_size = args.batch_size
@@ -49,9 +55,6 @@ class MetaAgent(object):
         self.beta_expbase    = float(np.power(self.tau*(self.beta_uplim-self.beta), 1./args.episode_num))
         self.beta_delta      = self.beta_expbase / self.tau
 
-        self.exploration_rate   = 0.5
-        self.exploration_min    = 0.01
-        self.exploration_decay  = 0.995
 
         self.trans_mem = deque()
         self.trans = namedtuple('trans', ['s', 'a', 's_', 'r', 'd'])
@@ -106,9 +109,11 @@ class MetaAgent(object):
 
         Q = torch.mv(Q.data, preference) ## torch.Size([3])
 
-        ## TODO
-        if np.random.rand() <= self.exploration_rate and self.is_train:
+        ## TODO：增加随机探索
+        if np.random.rand() <= self.epsilon and self.is_train:
             action = random.randrange(self.action_size) 
+            # action = np.random.choice(self.model_.action_size, 1)[0]
+            action = int(action)
         else:
             action = Q.max(0)[1].cpu().numpy() ##找到具有最大值的索引。max函数返回两个值：最大值和最大值的索引。只使用索引，该索引代表具有最高Q值的动作。
             action = int(action)
@@ -157,6 +162,7 @@ class MetaAgent(object):
             
             ## TODO： AttributeError: 'int' object has no attribute 'data'，应该是跟next_state的shape有关
             hq = hq.data[0,action]
+            # hq = hq[0, action].data
             whq = preference.dot(hq) ## 对预测的 Q_target 进行加权求和
             p = abs(wr + self.gamma * whq - wq) ## Eq(6), Q_target - Q_predict
         else:
@@ -293,8 +299,11 @@ class MetaAgent(object):
                 param.grad.data.clamp_(-1, 1)
             self.optimizer.step()
 
-            if self.exploration_rate > self.exploration_min:
-                self.exploration_rate *= self.exploration_decay
+            ## 探索率衰减
+            # if self.epsilon > self.epsilon_min:
+            #     self.epsilon *= self.exploration_decay
+            if self.epsilon_decay:
+                self.epsilon -= self.epsilon_delta
 
             if self.update_count % self.update_freq == 0:
                 self.model.load_state_dict(self.model_.state_dict())
@@ -349,7 +358,83 @@ class MetaAgent(object):
 
         return pref_param
     
+    def get_padding_sequence_batched(self, sequence, t):
+        size = sequence.shape[1]
+        seq = sequence[:,:t]
+        seq = np.append(seq, np.zeros((sequence.shape[0],size-t,sequence.shape[2])),axis=1)
+        return seq
+
+    def compute_acc_batched(self):
+        count=0
+        tab = [] ## 存储行为值
+        t = []  ## 存储时间步
+        i = 1
+        finished=[]
+        while(i<=self.x_train.shape[1]): ## 按batch处理，从第一个时间步开始遍历所有的时间步
+            act = self.brain.predict(np.reshape(self.get_padding_sequence_batched(self.x_train,i),(self.x_train.shape[0],self.x_train.shape[1],self.x_train.shape[2],1)),verbose=0)
+            ## act: (21152, 3)
+            for index in range(len(self.x_train)): ## 遍历所有的训练集中个体
+            ## index: 0~21151
+                act_=act[index]
+                if index in finished:
+                    continue
+                if(np.argmax(act_)!=0): ## np.argmax function returns the indices of the maximum values along a specified axis.
+                    if np.argmax(act_) == self.y_train[index]+1:
+                    ## act_为(3,)，取np.argmax为0/1/2,0为等待，1/2为标签，而y_train为0/1，所以要加1
+                        count+=1  ## 如果预测正确，计数器加1
+                    tab.append(np.argmax(act_))
+                    t.append(i) 
+                    ## t是一个list，存储的是做出预测的时间步，但不保证预测是否正确。如果要计算earliness，应将其放在count+=1后面
+                    finished.append(index)
+                    # break
+                if(i== self.x_train.shape[1] and np.argmax(act_)==0): ## 一直等待直到最后一个时间步
+                    if np.argmax(act_[1:]) == self.y_train[index]:
+                    ## 因为act_[1:]对(3,)截取为(2,)，所以取np.argmax后，值为0/1，所以y_train不用再加1
+                        count+=1
+                    tab.append(np.argmax(act_[1:]) + 1)
+                    t.append(i)
+            i+=1 ##所有人都遍历完之后，timestep再加1
+        # return count/len(self.x_train),tab,t
+        return count/len(self.x_train), tab, np.mean(t)/self.x_train.shape[1]
     
+    def compute_acc_val_batched(self):
+        count=0
+        tab = []
+        t = []
+        i = 1
+        finished=[]
+        while(i<=self.x_test.shape[1]):
+            act = self.brain.predict(np.reshape(self.get_padding_sequence_batched(self.x_test,i),(self.x_test.shape[0],self.x_test.shape[1],self.x_test.shape[2],1)),verbose=0)
+            for index in range(len(self.x_test)):
+                act_=act[index]
+                if index in finished:
+                    continue
+                if(np.argmax(act_)!=0):
+                    if np.argmax(act_) == self.y_test[index]+1:
+                        count+=1
+                    tab.append(np.argmax(act_))
+                    t.append(i)
+                    finished.append(index)
+                    # break
+                if(i== self.x_test.shape[1] and np.argmax(act_)==0):
+                    if np.argmax(act_[1:]) == self.y_test[index]:
+                        count+=1
+                    tab.append(np.argmax(act_[1:]) + 1)
+                    t.append(i)
+            i+=1
+        # return count/len(self.x_test),tab,t
+        return count/len(self.x_test), tab, np.mean(t)/self.x_test.shape[1]
+    
+    def harmonic_mean(self, acc, earl):
+        """
+        Computes the harmonic mean as illustrated by Patrick Schäfer et al. 2020
+        "TEASER: early and accurate time series classification"
+
+        :param acc: The accuracy of the prediction
+        :param earl: The earliness of the prediction
+        """
+        harmonic_mean = (2 * (1 - earl) * acc) / ((1 - earl) + acc)
+        return harmonic_mean
 
 
 # projection to simplex

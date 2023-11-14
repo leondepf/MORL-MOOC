@@ -1,5 +1,6 @@
 import visdom
 import torch
+import numpy as np
 
 
 class Monitor(object):
