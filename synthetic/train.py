@@ -26,7 +26,7 @@ parser.add_argument('--lr', type=float, default=1e-3, metavar='LR',
                     help='learning rate')
 parser.add_argument('--epsilon', type=float, default=0.5, metavar='EPS',
                     help='epsilon greedy exploration')
-parser.add_argument('--epsilon-decay', default=False, action='store_true',
+parser.add_argument('--epsilon-decay', default=True, action='store_true',
                     help='linear epsilon decay to zero')
 parser.add_argument('--weight-num', type=int, default=32, metavar='WN',
                     help='number of sampled weights per iteration')
@@ -58,8 +58,8 @@ Tensor = FloatTensor
 
 
 def train(env, agent, args):
-    monitor = Monitor(train=True, spec="-{}".format(args.method))
-    monitor.init_log(args.log, "m.{}_e.{}_n.{}".format(args.model, args.env_name, args.name))
+    # monitor = Monitor(train=True, spec="-{}".format(args.method))
+    # monitor.init_log(args.log, "m.{}_e.{}_n.{}".format(args.model, args.env_name, args.name))
     
     for num_eps in range(args.episode_num):
         ## 取出一个人的序列
@@ -85,8 +85,8 @@ def train(env, agent, args):
             state = env.get_sequence_state(timestep) ## (35, 22)
             action = agent.act(state, timestep)
             next_timestep, reward, terminal = env.step(action) ##这个next_state返回的是当前的时间步
-            if args.log:
-                monitor.add_log(state, action, reward, terminal, agent.w_kept)
+            # if args.log:
+            #     monitor.add_log(state, action, reward, terminal, agent.w_kept)
             
             next_state = env.get_sequence_state(next_timestep)  ##如果不是等待，则next_state和state相同
             # next_state = np.reshape(next_state,(1, env.x_train.shape[1], env.x_train.shape[2], 1))
@@ -96,7 +96,7 @@ def train(env, agent, args):
             ## agent.remember(state, action, reward, next_state, terminal)
             
             ## 相当于 agent.replay()
-            loss += agent.learn()
+            # loss += agent.learn()  ## 这个计算loss的操作是否应该挪到while循环之外？
 
             ## TODO：这个if应该可以删掉
             if timestep > 35:
@@ -105,30 +105,11 @@ def train(env, agent, args):
 
             tot_reward = tot_reward + (probe.cpu().numpy().dot(reward)) * np.power(args.gamma, timestep)
             timestep += 1
-
-        ## TODO: 评估部分
-        # if(index_episode%20==0):
-        #     print("Episode {}".format(index_episode))
-        if num_eps % 100==0 and num_eps != 0:
-            acc,res,t = agent.compute_acc_batched()
-            harmonic_mean_train = agent.harmonic_mean(acc,t)
-
-            acc_val,res_val,t_val = agent.compute_acc_val_batched()
-            harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
-
-            # acc,res,t = self.agent.compute_acc()
-            # acc_val,res_val,t_val = self.agent.compute_acc_val()
-            # print("acc_train {} ======> average_time_train {} ======> update {}".format(acc, np.mean(t), self.agent.update_number))
-            # print("acc_val {} ======> average_time_val {} ======> update {}".format(acc_val, np.mean(t_val), self.agent.update_number))
-            print("acc_train {} ======> average_time_train {}% ======> update {}".format(acc, np.round(100.*t, 3), self.agent.update_number))
-            print("harmonic_mean_train {} ".format(harmonic_mean_train))
-            print("acc_val {} ======> average_time_val {}% ======> update {}".format(acc_val, np.round(100.*t_val, 3), self.agent.update_number))  
-            print("harmonic_mean_val {} ".format(harmonic_mean_val))
-            # if acc > 0.9 :
-            #     self.agent.save_weight()
         
+        loss += agent.learn()
+        # print("loss: %0.4f" %loss)
 
-        ## TODO: 修改predict函数的参数,应该把agent.w_kept传进去
+        ## TODO: 修改predict函数的参数,应该把agent.w_kept传进去 ；传入state参数是否正确？
         _, q = agent.predict(state, probe)
         if args.env_name == "dst":
             act_1 = q[0, 3]
@@ -154,21 +135,39 @@ def train(env, agent, args):
             act_1 = probe.dot(act_1.data)
             act_2 = probe.dot(act_2.data)
         
-        print("end of eps %d with total reward (1) %0.2f, the Q is %0.2f | %0.2f | %0.2f; loss: %0.4f" % (
-            num_eps,
-            tot_reward,
-            act_0,
-            act_1,
-            act_2,
-            # q__max,
-            loss / timestep))
-        monitor.update(num_eps,
-                       tot_reward,
-                       act_0, 
-                       act_1,
-                       act_2,
-                       #    q__max,
-                       loss / timestep)
+        # print("end of eps %d with total reward (1) %0.2f, the Q is %0.2f | %0.2f | %0.2f; loss: %0.4f" % (
+        #     num_eps,
+        #     tot_reward,
+        #     act_0,
+        #     act_1,
+        #     act_2,
+        #     # q__max,
+        #     loss / timestep))
+
+        # monitor.update(num_eps,
+        #                tot_reward,
+        #                act_0, 
+        #                act_1,
+        #                act_2,
+        #                #    q__max,
+        #                loss / timestep)  ## 最后一个可以换为loss
+
+        
+        ## TODO: 评估部分
+        if(num_eps%20==0):
+            print("Episode {}".format(num_eps))
+        if num_eps % 100==0 and num_eps != 0:
+            acc,res,t = agent.compute_acc_batched(env,probe) ##相当于agent.predict()
+            harmonic_mean_train = agent.harmonic_mean(acc,t)
+
+            print("acc_train {} ======> average_time_train {}% ======> update {}".format(acc, np.round(100.*t, 3), agent.update_number))
+            print("harmonic_mean_train {} ".format(harmonic_mean_train))
+
+            # acc_val,res_val,t_val = agent.compute_acc_val_batched(env,probe)
+            # harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
+            # print("acc_val {} ======> average_time_val {}% ======> update {}".format(acc_val, np.round(100.*t_val, 3), agent.update_number))  
+            # print("harmonic_mean_val {} ".format(harmonic_mean_val))
+            
     
     agent.save(args.save, "m.{}_e.{}_n.{}".format(args.model, args.env_name, args.name))
 

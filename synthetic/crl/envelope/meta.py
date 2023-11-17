@@ -63,6 +63,7 @@ class MetaAgent(object):
         self.memory_0 = deque(maxlen=3000)
         self.memory_1 = deque(maxlen=3000)
         self.memory_2 = deque(maxlen=3000)
+        self.update_number = 0
 
         if args.optimizer == 'Adam':
             self.optimizer = optim.Adam(self.model_.parameters(), lr=args.lr)
@@ -96,7 +97,7 @@ class MetaAgent(object):
                 self.w_kept = (torch.abs(self.w_kept) / \
                             torch.norm(self.w_kept, p=1)).type(FloatTensor)
             preference = self.w_kept
-        state = torch.from_numpy(state).type(FloatTensor)
+        state = torch.from_numpy(state).type(FloatTensor) ## state.shape = (35, 22)
 
         ##TODO：检查这里的输入输出shape
         ##这里调用类EnvelopeCNN的forward函数，输入state和preference，输出Q值
@@ -166,7 +167,7 @@ class MetaAgent(object):
             whq = preference.dot(hq) ## 对预测的 Q_target 进行加权求和
             p = abs(wr + self.gamma * whq - wq) ## Eq(6), Q_target - Q_predict
         else:
-            print(self.beta)
+            # print(self.beta) ## print arg.beta==0.01
             self.w_kept = None
             if self.epsilon_decay:
                 self.epsilon -= self.epsilon_delta
@@ -299,6 +300,8 @@ class MetaAgent(object):
                 param.grad.data.clamp_(-1, 1)
             self.optimizer.step()
 
+            self.update_number+=80  ## 每80次replay更新1次target_model
+
             ## 探索率衰减
             # if self.epsilon > self.epsilon_min:
             #     self.epsilon *= self.exploration_decay
@@ -307,6 +310,7 @@ class MetaAgent(object):
 
             if self.update_count % self.update_freq == 0:
                 self.model.load_state_dict(self.model_.state_dict())
+            
 
             return loss.data
 
@@ -360,70 +364,101 @@ class MetaAgent(object):
     
     def get_padding_sequence_batched(self, sequence, t):
         size = sequence.shape[1]
-        seq = sequence[:,:t]
-        seq = np.append(seq, np.zeros((sequence.shape[0],size-t,sequence.shape[2])),axis=1)
+        seq = sequence[:, :t, :]
+        seq = np.append(seq, np.zeros((sequence.shape[0], size-t, sequence.shape[2])),axis=1)
         return seq
 
-    def compute_acc_batched(self):
+    def compute_acc_batched(self, env, probe):
         count=0
         tab = [] ## 存储行为值
         t = []  ## 存储时间步
         i = 1
         finished=[]
-        while(i<=self.x_train.shape[1]): ## 按batch处理，从第一个时间步开始遍历所有的时间步
-            act = self.brain.predict(np.reshape(self.get_padding_sequence_batched(self.x_train,i),(self.x_train.shape[0],self.x_train.shape[1],self.x_train.shape[2],1)),verbose=0)
-            ## act: (21152, 3)
-            for index in range(len(self.x_train)): ## 遍历所有的训练集中个体
-            ## index: 0~21151
-                act_=act[index]
+        while(i<=env.x_train.shape[1]): ## 按batch处理，从第一个时间步开始遍历所有的时间步 -> 为什么要重新做一遍截取？
+            batch_state = self.get_padding_sequence_batched(env.x_train,i)  ## (15902, 35, 22)
+            batch_state = torch.from_numpy(batch_state).type(FloatTensor)
+
+            ## probe.shape = (2,）
+            probe_ = probe.unsqueeze(0) ## torch.Size([1, 2])
+            probe_ = probe_.expand(env.x_train.shape[0], -1) ## torch.Size([15902, 2])
+
+            _, batch_Q = self.model(Variable(FloatTensor(batch_state), requires_grad=False),
+                          Variable(probe_, requires_grad=False))  ##batch_Q: (15902, 3, 2)
+
+            for index in range(len(env.x_train)): ## 遍历所有的训练集中个体,index: 0~15091
+                # state_ = batch_state[index] ## torch.Size([35, 22])
+                # state_ = torch.from_numpy(state_).type(FloatTensor)
+                
+                # Q_= batch_Q[0][index] ## torch.Size([3, 2])
+                Q_= batch_Q[index] ## torch.Size([3, 2])
+                # Q_ = Q_.view(-1, self.model.reward_size) ## torch.Size([3, 2])
+
+                Q_ = torch.mv(Q_.data, probe) ## Q: torch.Size([3]), probe:
+
+                act = Q_.max(0)[1].cpu().numpy() ##找到具有最大值的索引。max函数返回两个值：最大值和最大值的索引。只使用索引，该索引代表具有最高Q值的动作。
+                act = int(act)
+
                 if index in finished:
                     continue
-                if(np.argmax(act_)!=0): ## np.argmax function returns the indices of the maximum values along a specified axis.
-                    if np.argmax(act_) == self.y_train[index]+1:
-                    ## act_为(3,)，取np.argmax为0/1/2,0为等待，1/2为标签，而y_train为0/1，所以要加1
+                if(act != 0): ## np.argmax function returns the indices of the maximum values along a specified axis.
+                    if act == env.y_train[index]+1:
+                    ## act_为(3,)，取np.argmax为0/1/2, 0为等待，1/2为标签，而y_train为0/1，所以要加1
                         count+=1  ## 如果预测正确，计数器加1
-                    tab.append(np.argmax(act_))
+                    tab.append(act)
                     t.append(i) 
                     ## t是一个list，存储的是做出预测的时间步，但不保证预测是否正确。如果要计算earliness，应将其放在count+=1后面
                     finished.append(index)
                     # break
-                if(i== self.x_train.shape[1] and np.argmax(act_)==0): ## 一直等待直到最后一个时间步
-                    if np.argmax(act_[1:]) == self.y_train[index]:
+                if(i== env.x_train.shape[1] and act==0): ## 一直等待直到最后一个时间步
+                    if Q_[1:].max(0)[1].cpu().numpy()  == env.y_train[index]:
                     ## 因为act_[1:]对(3,)截取为(2,)，所以取np.argmax后，值为0/1，所以y_train不用再加1
                         count+=1
-                    tab.append(np.argmax(act_[1:]) + 1)
+                    tab.append(Q_[1:].max(0)[1].cpu().numpy() + 1)
                     t.append(i)
             i+=1 ##所有人都遍历完之后，timestep再加1
         # return count/len(self.x_train),tab,t
-        return count/len(self.x_train), tab, np.mean(t)/self.x_train.shape[1]
+        return count/len(env.x_train), tab, np.mean(t)/env.x_train.shape[1]
     
-    def compute_acc_val_batched(self):
+    def compute_acc_val_batched(self, env, probe):
         count=0
-        tab = []
-        t = []
+        tab = [] ## 存储行为值
+        t = []  ## 存储时间步
         i = 1
         finished=[]
-        while(i<=self.x_test.shape[1]):
-            act = self.brain.predict(np.reshape(self.get_padding_sequence_batched(self.x_test,i),(self.x_test.shape[0],self.x_test.shape[1],self.x_test.shape[2],1)),verbose=0)
-            for index in range(len(self.x_test)):
-                act_=act[index]
+        while(i<=env.x_test.shape[1]): ## 按batch处理，从第一个时间步开始遍历所有的时间步
+            batch_state = np.reshape(self.get_padding_sequence_batched(env.x_test,i),(env.x_test.shape[0],env.x_test.shape[1],env.x_test.shape[2],1))
+            _, Q = self.model(Variable(FloatTensor(batch_state).unsqueeze(0), requires_grad=False),
+                          Variable(probe.unsqueeze(0), requires_grad=False))  ## Q: (batch_size, 3, 2)
+
+            for index in range(len(env.x_test)): ## 遍历所有的训练集中个体
+            ## index: 0~21151
+                Q_=Q[index] ## torch.Size([3, 2])
+                # Q_ = Q_.view(-1, self.model.reward_size) 
+
+                Q_ = torch.mv(Q_.data, probe) ## torch.Size([3])
+
+                act = Q_.max(0)[1].cpu().numpy() ##找到具有最大值的索引。max函数返回两个值：最大值和最大值的索引。只使用索引，该索引代表具有最高Q值的动作。
+                act = int(act)
                 if index in finished:
                     continue
-                if(np.argmax(act_)!=0):
-                    if np.argmax(act_) == self.y_test[index]+1:
-                        count+=1
-                    tab.append(np.argmax(act_))
-                    t.append(i)
+                if(act!=0): ## np.argmax function returns the indices of the maximum values along a specified axis.
+                    if act == env.y_test[index]+1:
+                    ## act_为(3,)，取np.argmax为0/1/2, 0为等待，1/2为标签，而y_train为0/1，所以要加1
+                        count+=1  ## 如果预测正确，计数器加1
+                    tab.append(act)
+                    t.append(i) 
+                    ## t是一个list，存储的是做出预测的时间步，但不保证预测是否正确。如果要计算earliness，应将其放在count+=1后面
                     finished.append(index)
                     # break
-                if(i== self.x_test.shape[1] and np.argmax(act_)==0):
-                    if np.argmax(act_[1:]) == self.y_test[index]:
+                if(i== env.x_test.shape[1] and act==0): ## 一直等待直到最后一个时间步
+                    if Q_[1:].max(0)[1].cpu().numpy()  == env.y_test[index]:
+                    ## 因为act_[1:]对(3,)截取为(2,)，所以取np.argmax后，值为0/1，所以y_train不用再加1
                         count+=1
-                    tab.append(np.argmax(act_[1:]) + 1)
+                    tab.append(Q_[1:].max(0)[1].cpu().numpy() + 1)
                     t.append(i)
-            i+=1
+            i+=1 ##所有人都遍历完之后，timestep再加1
         # return count/len(self.x_test),tab,t
-        return count/len(self.x_test), tab, np.mean(t)/self.x_test.shape[1]
+        return count/len(env.x_test), tab, np.mean(t)/env.x_test.shape[1]
     
     def harmonic_mean(self, acc, earl):
         """

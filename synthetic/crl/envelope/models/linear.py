@@ -113,12 +113,21 @@ class EnvelopeCNN(nn.Module):
         self.reward_size = reward_size ## 2
 
         ## TODO：可将backbone换为 Conv1d 或 RNN/LSTM/Transformer
-        self.conv1 = nn.Conv2d(in_channels=35, out_channels=128, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm2d(128)
-        self.conv2 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(256)
-        self.conv3 = nn.Conv2d(in_channels=256, out_channels=128, kernel_size=3, padding=1)
-        self.bn3 = nn.BatchNorm2d(128)
+        # self.conv1 = nn.Conv2d(in_channels=24, out_channels=128, kernel_size=3, padding=1) ##需要提前变换timestep和feature的维度
+        # self.bn1 = nn.BatchNorm2d(128)
+        # self.conv2 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, padding=1)
+        # self.bn2 = nn.BatchNorm2d(256)
+        # self.conv3 = nn.Conv2d(in_channels=256, out_channels=128, kernel_size=3, padding=1)
+        # self.bn3 = nn.BatchNorm2d(128)
+        # self.fc = nn.Linear(128, action_size * reward_size)
+
+        ## Conv1d
+        self.conv1 = nn.Conv1d(in_channels=24, out_channels=128, kernel_size=3, stride=1, padding=1) ## features+probe: 22+2
+        self.bn1 = nn.BatchNorm1d(128)
+        self.conv2 = nn.Conv1d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding=1)
+        self.bn2 = nn.BatchNorm1d(256)
+        self.conv3 = nn.Conv1d(in_channels=256, out_channels=128, kernel_size=3, stride=1, padding=1)
+        self.bn3 = nn.BatchNorm1d(128)
         self.fc = nn.Linear(128, action_size * reward_size)
 
     def H(self, Q, w, s_num, w_num):
@@ -150,38 +159,38 @@ class EnvelopeCNN(nn.Module):
         return HQ
 
     def forward(self, x, preference, w_num=1):
-        s_num = int(preference.size(0) / w_num)
+        # s_num = int(preference.size(0) / w_num)
 
-        ##TODO: x.shape = (1, 35, 22), preference.shape = (1, 2), 需要调整preference的shape
-        #preference = preference.view(-1, x.shape[1], preference.shape[1])
-        preference = preference.unsqueeze(1) ## torch.Size([1, 1, 2])
-        preference = preference.expand(-1, x.shape[1], -1) ## torch.Size([1, 35, 2])
-        # preference = preference.repeat(-1, x.shape[1], -1)
+        ##TODO: x.shape = (?, 35, 22), preference.shape = (?, 2), 需要调整preference的shape
+        preference = preference.unsqueeze(1) ## torch.Size([?, 1, 2])
+        preference = preference.expand(-1, x.shape[1], -1) ## torch.Size([?, 35, 2])
 
-        x = torch.cat((x, preference), dim=-1)  ## torch.Size([1, 35, 24])
+        x = torch.cat((x, preference), dim=-1)  ## torch.Size([?, 35, 24])
 
-        x = x.unsqueeze(x.dim()) ## torch.Size([1, 35, 24, 1]) -> [1,1,35,24]
-        # x = x.unsqueeze(-1)
+        x = x.permute(0, 2, 1) ## torch.Size([?, 24, 35])
+        ## TODO：操作维度需要调整, pool需要对time维度进行池化
 
-        ## TODO：操作维度需要调整, pool需要对time
-        x = self.conv1(x) ## torch.Size([1, 128, 24, 1])，是不是应该在特征维度上处理？
+        x = self.conv1(x) ## torch.Size([?, 128, 35])，是不是应该在特征维度上处理？
         x = self.bn1(x)
         x = F.relu(x)
         x = F.dropout(x, p=0.2)
-        x = self.conv2(x) ## torch.Size([1, 256, 24, 1])
+        x = self.conv2(x) ## torch.Size([?, 256, 35])
         x = self.bn2(x)
         x = F.relu(x)
         x = F.dropout(x, p=0.2)
-        x = self.conv3(x) ## torch.Size([1, 128, 24, 1])
+        x = self.conv3(x) ## torch.Size([?, 128, 35])
         x = self.bn3(x)
         x = F.relu(x)
         x = F.dropout(x, p=0.2)
-        x = F.avg_pool2d(x, kernel_size=x.size()[2:]) ## torch.Size([1, 128, 1, 1])
-        x = x.view(-1, 128) ## torch.Size([1, 128])
-        q = self.fc(x) ## torch.Size([1, 6])
+        # x = F.avg_pool2d(x, kernel_size=x.size()[2:]) 
+        x = F.avg_pool1d(x, kernel_size=x.size()[2])  ## torch.Size([?, 128, 1])
 
-        ##TODO: [1, 6]reshape到[1, 3, 2]后，能代表3个action的2个reward吗？
-        q = q.view(q.size(0), self.action_size, self.reward_size) ## torch.Size([1, 3, 2])
+        # x = x.squeeze(2)
+        x = x.view(-1, 128) ## torch.Size([?, 128]) 
+        q = self.fc(x) ## torch.Size([?, 6])
+
+        ##TODO: [?, 6]reshape到[?, 3, 2]后，能代表3个action的2个reward吗？
+        q = q.view(q.size(0), self.action_size, self.reward_size) ## torch.Size([?, 3, 2])
 
         # hq = self.H(q.detach().view(-1, self.reward_size), preference, s_num, w_num)
 
