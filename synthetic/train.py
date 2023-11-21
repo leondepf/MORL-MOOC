@@ -79,7 +79,7 @@ def train(env, agent, args):
         elif args.env_name in ['ft', 'ft5', 'ft7']:
             probe = FloatTensor([0.8, 0.2, 0.0, 0.0, 0.0, 0.0])
         elif args.env_name == "mooc":
-            probe = FloatTensor([0.3, 0.7])
+            probe = FloatTensor([0.3, 0.7]) ## 可调
 
         while not terminal and timestep <= env.x_train.shape[1]:
             state = env.get_sequence_state(timestep) ## (35, 22)
@@ -92,11 +92,12 @@ def train(env, agent, args):
             # next_state = np.reshape(next_state,(1, env.x_train.shape[1], env.x_train.shape[2], 1))
      
             agent.memorize(state, action, next_state, reward, terminal)
+            # agent.memorize(state, action, next_state, reward, terminal, roi=False)
             ## TODO: 是否需要根据action的类型进行分类存储？
             ## agent.remember(state, action, reward, next_state, terminal)
             
             ## 相当于 agent.replay()
-            # loss += agent.learn()  ## 这个计算loss的操作是否应该挪到while循环之外？
+            # loss += agent.learn()  ## 一次iteration
 
             ## TODO：这个if应该可以删掉
             if timestep > 35:
@@ -104,36 +105,37 @@ def train(env, agent, args):
                 agent.reset()
 
             tot_reward = tot_reward + (probe.cpu().numpy().dot(reward)) * np.power(args.gamma, timestep)
+            ## 这个tot_reward是否要挪到while循环之外？
             timestep += 1
         
-        loss += agent.learn()
+        loss += agent.learn() ## 可能会有问题
         # print("loss: %0.4f" %loss)
 
-        ## TODO: 修改predict函数的参数,应该把agent.w_kept传进去 ；传入state参数是否正确？
-        _, q = agent.predict(state, probe)
-        if args.env_name == "dst":
-            act_1 = q[0, 3]
-            act_2 = q[0, 1]
-        elif args.env_name in ['ft', 'ft5', 'ft7']:
-            act_1 = q[0, 1]
-            act_2 = q[0, 0]
-        elif args.env_name == "mooc":
-            ## TODO: 确定这几个Q值
-            act_0 = q[0, 0]
-            act_1 = q[0, 1]
-            act_2 = q[0, 2]
+        # ## TODO: 传入state参数是否正确？这个state是哪一个timestep的state？
+        # _, q = agent.predict(state, probe)
+        # if args.env_name == "dst":
+        #     act_1 = q[0, 3]
+        #     act_2 = q[0, 1]
+        # elif args.env_name in ['ft', 'ft5', 'ft7']:
+        #     act_1 = q[0, 1]
+        #     act_2 = q[0, 0]
+        # elif args.env_name == "mooc":
+        #     ## TODO: 确定这几个Q值
+        #     act_0 = q[0, 0]
+        #     act_1 = q[0, 1]
+        #     act_2 = q[0, 2]
 
 
-        if args.method == "crl-naive":
-            act_1 = act_1.data.cpu()
-            act_2 = act_2.data.cpu()
-        elif args.method == "crl-envelope":
-            act_0 = probe.dot(act_0.data)
-            act_1 = probe.dot(act_1.data)
-            act_2 = probe.dot(act_2.data)
-        elif args.method == "crl-energy":
-            act_1 = probe.dot(act_1.data)
-            act_2 = probe.dot(act_2.data)
+        # if args.method == "crl-naive":
+        #     act_1 = act_1.data.cpu()
+        #     act_2 = act_2.data.cpu()
+        # elif args.method == "crl-envelope":
+        #     act_0 = probe.dot(act_0.data)
+        #     act_1 = probe.dot(act_1.data)
+        #     act_2 = probe.dot(act_2.data)
+        # elif args.method == "crl-energy":
+        #     act_1 = probe.dot(act_1.data)
+        #     act_2 = probe.dot(act_2.data)
         
         # print("end of eps %d with total reward (1) %0.2f, the Q is %0.2f | %0.2f | %0.2f; loss: %0.4f" % (
         #     num_eps,
@@ -153,15 +155,25 @@ def train(env, agent, args):
         #                loss / timestep)  ## 最后一个可以换为loss
 
         
-        ## TODO: 评估部分
-        if(num_eps%20==0):
-            print("Episode {}".format(num_eps))
-        if num_eps % 100==0 and num_eps != 0:
-            acc,res,t = agent.compute_acc_batched(env,probe) ##相当于agent.predict()
-            harmonic_mean_train = agent.harmonic_mean(acc,t)
+        ## 评估部分
+        ## TODO: 改为iteration对100取余, 可以在train的过程中进行评估
+        ## 这一部分是放在episode循环之内，还是放在外面也无影响？-> 无影响
+        if agent.update_count % 1000 == 0:
+            # acc,res,t = agent.compute_acc_batched(env,probe)
+            # harmonic_mean_train = agent.harmonic_mean(acc,t)
+            # print("acc_train {} ======> average_time_train {}% ======> update {}".format(acc, np.round(100.*t, 3), agent.update_number))
+            acc_val,res_val,t_val = agent.compute_acc_val_batched(env,probe)
+            harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
+            print("iteration {} : acc_val {} , average_time_val {}%, harmonic_mean_val {} ".format(agent.update_count, acc_val, np.round(100.*t_val, 3), harmonic_mean_val))  
+        
+        # if(num_eps%20==0):
+        #     print("Episode {}".format(num_eps))
+        # if num_eps % 100==0 and num_eps != 0:
+        #     acc,res,t = agent.compute_acc_batched(env,probe) ##相当于agent.predict()
+        #     harmonic_mean_train = agent.harmonic_mean(acc,t)
 
-            print("acc_train {} ======> average_time_train {}% ======> update {}".format(acc, np.round(100.*t, 3), agent.update_number))
-            print("harmonic_mean_train {} ".format(harmonic_mean_train))
+        #     print("acc_train {} ======> average_time_train {}% ======> update {}".format(acc, np.round(100.*t, 3), agent.update_number))
+        #     print("harmonic_mean_train {} ".format(harmonic_mean_train))
 
             # acc_val,res_val,t_val = agent.compute_acc_val_batched(env,probe)
             # harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)

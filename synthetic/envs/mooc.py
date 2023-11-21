@@ -22,7 +22,7 @@ class MOOC_Env():
         self.sequence = {"data" : sequence, "label" : label}
         self.timestep = 1 ##当前时间步,并不是强化学习中的状态
         self.done = False
-        ## TODO: 这个reward需要调整
+        ## TODO: 这个reward可能需要调整
         self.reward = [[0, 1], [1, 0]]
         self.param_lambda = 0.001
         self.param_p = 1/3

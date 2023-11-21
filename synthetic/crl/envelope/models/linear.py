@@ -122,7 +122,8 @@ class EnvelopeCNN(nn.Module):
         # self.fc = nn.Linear(128, action_size * reward_size)
 
         ## Conv1d
-        self.conv1 = nn.Conv1d(in_channels=24, out_channels=128, kernel_size=3, stride=1, padding=1) ## features+probe: 22+2
+        # self.conv1 = nn.Conv1d(in_channels=24, out_channels=128, kernel_size=3, stride=1, padding=1) ##XuetangX: features+probe: 22+2
+        self.conv1 = nn.Conv1d(in_channels=9, out_channels=128, kernel_size=3, stride=1, padding=1) ##KDDCup: features+probe: 7+2
         self.bn1 = nn.BatchNorm1d(128)
         self.conv2 = nn.Conv1d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding=1)
         self.bn2 = nn.BatchNorm1d(256)

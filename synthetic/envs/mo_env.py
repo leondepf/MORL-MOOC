@@ -30,21 +30,21 @@ class MultiObjectiveEnv(object):
             self.reward_spec = self.env.reward_spec
         if env_name == "mooc":
             ## KDD2015 Dataset
-            # self.x_train, self.x_test, self.y_train, self.y_test = np.load("/mnt/data/pan_feng/EarlyClassificationTimeSeries-MOOC/KDD2015/resampled_X_train_all_timesteps.npy"),\
-            # np.load("/mnt/data/pan_feng/EarlyClassificationTimeSeries-MOOC/KDD2015/X_test_all_timesteps.npy"),\
-            # np.load("/mnt/data/pan_feng/EarlyClassificationTimeSeries-MOOC/KDD2015/resampled_C_train_all_timesteps.npy"),\
-            # np.load("/mnt/data/pan_feng/EarlyClassificationTimeSeries-MOOC/KDD2015/C_test_all_timesteps.npy")
+            self.x_train, self.x_test, self.y_train, self.y_test = np.load("/mnt/data/pan_feng/EarlyClassificationTimeSeries-MOOC/KDD2015/resampled_X_train_all_timesteps.npy"),\
+            np.load("/mnt/data/pan_feng/EarlyClassificationTimeSeries-MOOC/KDD2015/X_test_all_timesteps.npy"),\
+            np.load("/mnt/data/pan_feng/EarlyClassificationTimeSeries-MOOC/KDD2015/resampled_C_train_all_timesteps.npy"),\
+            np.load("/mnt/data/pan_feng/EarlyClassificationTimeSeries-MOOC/KDD2015/C_test_all_timesteps.npy")
 
             ## XuetaingX Dataset
-            self.x_train, self.x_test, self.y_train, self.y_test = np.load("/mnt/data/pan_feng/EarlyClassificationTimeSeries-MOOC/XuetangX/resampled_X_train_all_timesteps.npy"),\
-            np.load("/mnt/data/pan_feng/EarlyClassificationTimeSeries-MOOC/XuetangX/X_test_all_timesteps.npy"),\
-            np.load("/mnt/data/pan_feng/EarlyClassificationTimeSeries-MOOC/XuetangX/resampled_C_train_all_timesteps.npy"),\
-            np.load("/mnt/data/pan_feng/EarlyClassificationTimeSeries-MOOC/XuetangX/C_test_all_timesteps.npy")
+            # self.x_train, self.x_test, self.y_train, self.y_test = np.load("/mnt/data/pan_feng/EarlyClassificationTimeSeries-MOOC/XuetangX/resampled_X_train_all_timesteps.npy"),\
+            # np.load("/mnt/data/pan_feng/EarlyClassificationTimeSeries-MOOC/XuetangX/X_test_all_timesteps.npy"),\
+            # np.load("/mnt/data/pan_feng/EarlyClassificationTimeSeries-MOOC/XuetangX/resampled_C_train_all_timesteps.npy"),\
+            # np.load("/mnt/data/pan_feng/EarlyClassificationTimeSeries-MOOC/XuetangX/C_test_all_timesteps.npy")
             ## (15902, 35, 22) (4768, 35, 22) (15902,) (4768,)
 
 
-            # self.state_size        = 30 ## KDD2015 Dataset
-            self.state_size  = 35 ## XuetangX Dataset
+            self.state_size    = 30 ## KDD2015 Dataset
+            # self.state_size  = 35 ## XuetangX Dataset
             self.action_size = 3
 
             #spec表示取值范围

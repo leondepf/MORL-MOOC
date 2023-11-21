@@ -76,12 +76,13 @@ class MetaAgent(object):
 
         if self.is_train:
             self.model.train()
+            # self.model_.train()
         if use_cuda:
             self.model.cuda()
             self.model_.cuda()
 
-        # self.state_size        = 30 ## KDD2015 Dataset
-        self.state_size        = 35 ## XuetangX Dataset
+        self.state_size        = 30 ## KDD2015 Dataset
+        # self.state_size        = 35 ## XuetangX Dataset
         self.action_size       = 3
 
 
@@ -132,7 +133,7 @@ class MetaAgent(object):
 
         # return action
 
-    def memorize(self, state, action, next_state, reward, terminal):
+    def memorize(self, state, action, next_state, reward, terminal, roi=False):
         self.trans_mem.append(self.trans(
             torch.from_numpy(state).type(FloatTensor),  #state (35, 22)
             action,  #action (1,)
@@ -142,9 +143,12 @@ class MetaAgent(object):
 
         ##TODO:从这里开始检查输入输出的shape
         # randomly produce a preference for calculating priority
-        # preference = self.w_kept
-        preference = torch.randn(self.model_.reward_size)
-        preference = (torch.abs(preference) / torch.norm(preference, p=1)).type(FloatTensor)
+        if roi: 
+            preference = self.w_kept
+        else:
+            preference = torch.randn(self.model_.reward_size)
+            preference = (torch.abs(preference) / torch.norm(preference, p=1)).type(FloatTensor)
+        
         state = torch.from_numpy(state).type(FloatTensor)
 
         _, q = self.model_(Variable(state.unsqueeze(0), requires_grad=False),
@@ -212,27 +216,9 @@ class MetaAgent(object):
         inds = inds[mask.eq(0)]
         return inds
 
-    def learn(self):
-        ## TODO：如果train.py中使用agent.remember()函数，则加入以下代码：
-        '''
-        if (len(self.memory_0) < (sample_batch_size/3) or len(self.memory_1) < (sample_batch_size/3) or len(self.memory_2) < (sample_batch_size /3)):
-            return ## 如果三个memory中有一个小于sample_batch_size/3，就不进行训练，不会执行后面的语句
-        
-        ## 当3个memory存满后，才会执行下面的语句，这样处理保证了0/1/2三个动作的采样是一致的，不会导致不均衡问题
-        sample_size = int(sample_batch_size/3)
-        sample_batch_0 = random.sample(self.memory_0, sample_size)
-        sample_batch_1 = random.sample(self.memory_1, sample_size + 1)
-        sample_batch_2 = random.sample(self.memory_2, sample_size + 1)
-        
-        sample_batch_1.extend(sample_batch_2)
-        sample_batch_0.extend(sample_batch_1)
-        random.shuffle(sample_batch_0)
-        sample_batch = sample_batch_0
-        '''
+    def learn(self, preference=None):
 
         if len(self.trans_mem) > self.batch_size:
-
-            self.update_count += 1
 
             action_size = self.model_.action_size
             reward_size = self.model_.reward_size
@@ -245,9 +231,23 @@ class MetaAgent(object):
             next_state_batch = batchify(map(lambda x: x.s_.unsqueeze(0), minibatch))
             terminal_batch = batchify(map(lambda x: x.d, minibatch))
 
-            w_batch = np.random.randn(self.weight_num, reward_size)
-            w_batch = np.abs(w_batch) / np.linalg.norm(w_batch, ord=1, axis=1, keepdims=True)
-            w_batch = torch.from_numpy(w_batch.repeat(self.batch_size, axis=0)).type(FloatTensor)
+            # w_batch = np.random.randn(self.weight_num, reward_size)
+            # w_batch = np.abs(w_batch) / np.linalg.norm(w_batch, ord=1, axis=1, keepdims=True)
+            # w_batch = torch.from_numpy(w_batch.repeat(self.batch_size, axis=0)).type(FloatTensor)
+
+            if preference is None:
+                w_batch = np.random.randn(self.weight_num, self.model_.reward_size)
+                w_batch = np.abs(w_batch) / \
+                          np.linalg.norm(w_batch, ord=1, axis=1, keepdims=True)
+                w_batch = torch.from_numpy(w_batch.repeat(self.batch_size, axis=0)).type(FloatTensor)
+            else:
+                w_batch = preference.cpu().numpy()
+                w_batch = np.expand_dims(w_batch, axis=0)
+                w_batch = np.abs(w_batch) / \
+                          np.linalg.norm(w_batch, ord=1, axis=1, keepdims=True)
+                w_batch = torch.from_numpy(w_batch.repeat(self.batch_size, axis=0)).type(FloatTensor)
+            
+
 
             __, Q = self.model_(Variable(torch.cat(state_batch, dim=0)),
                                 Variable(w_batch), w_num=self.weight_num)
@@ -300,7 +300,7 @@ class MetaAgent(object):
                 param.grad.data.clamp_(-1, 1)
             self.optimizer.step()
 
-            self.update_number+=80  ## 每80次replay更新1次target_model
+            self.update_count += 1 ## iteration+1
 
             ## 探索率衰减
             # if self.epsilon > self.epsilon_min:
@@ -426,22 +426,32 @@ class MetaAgent(object):
         i = 1
         finished=[]
         while(i<=env.x_test.shape[1]): ## 按batch处理，从第一个时间步开始遍历所有的时间步
-            batch_state = np.reshape(self.get_padding_sequence_batched(env.x_test,i),(env.x_test.shape[0],env.x_test.shape[1],env.x_test.shape[2],1))
-            _, Q = self.model(Variable(FloatTensor(batch_state).unsqueeze(0), requires_grad=False),
-                          Variable(probe.unsqueeze(0), requires_grad=False))  ## Q: (batch_size, 3, 2)
+            batch_state = self.get_padding_sequence_batched(env.x_test,i)  ## (15902, 35, 22)
+            batch_state = torch.from_numpy(batch_state).type(FloatTensor)
 
-            for index in range(len(env.x_test)): ## 遍历所有的训练集中个体
-            ## index: 0~21151
-                Q_=Q[index] ## torch.Size([3, 2])
-                # Q_ = Q_.view(-1, self.model.reward_size) 
+            ## probe.shape = (2,）
+            probe_ = probe.unsqueeze(0) ## torch.Size([1, 2])
+            probe_ = probe_.expand(env.x_test.shape[0], -1) ## torch.Size([15902, 2])
 
-                Q_ = torch.mv(Q_.data, probe) ## torch.Size([3])
+            _, batch_Q = self.model(Variable(FloatTensor(batch_state), requires_grad=False),
+                          Variable(probe_, requires_grad=False))  ##batch_Q: (15902, 3, 2)
+
+            for index in range(len(env.x_test)): ## 遍历所有的训练集中个体,index: 0~15091
+                # state_ = batch_state[index] ## torch.Size([35, 22])
+                # state_ = torch.from_numpy(state_).type(FloatTensor)
+                
+                # Q_= batch_Q[0][index] ## torch.Size([3, 2])
+                Q_= batch_Q[index] ## torch.Size([3, 2])
+                # Q_ = Q_.view(-1, self.model.reward_size) ## torch.Size([3, 2])
+
+                Q_ = torch.mv(Q_.data, probe) ## Q: torch.Size([3]), probe:
 
                 act = Q_.max(0)[1].cpu().numpy() ##找到具有最大值的索引。max函数返回两个值：最大值和最大值的索引。只使用索引，该索引代表具有最高Q值的动作。
                 act = int(act)
+
                 if index in finished:
                     continue
-                if(act!=0): ## np.argmax function returns the indices of the maximum values along a specified axis.
+                if(act != 0): ## np.argmax function returns the indices of the maximum values along a specified axis.
                     if act == env.y_test[index]+1:
                     ## act_为(3,)，取np.argmax为0/1/2, 0为等待，1/2为标签，而y_train为0/1，所以要加1
                         count+=1  ## 如果预测正确，计数器加1

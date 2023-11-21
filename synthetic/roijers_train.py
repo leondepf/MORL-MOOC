@@ -2,6 +2,7 @@ from __future__ import absolute_import, division, print_function
 import argparse
 import numpy as np
 import torch
+import random
 from utils.monitor import Monitor
 from envs.mo_env import MultiObjectiveEnv
 
@@ -30,7 +31,7 @@ parser.add_argument('--lr', type=float, default=1e-3, metavar='LR',
                     help='learning rate')
 parser.add_argument('--epsilon', type=float, default=0.5, metavar='EPS',
                     help='epsilon greedy exploration')
-parser.add_argument('--epsilon-decay', default=False, action='store_true',
+parser.add_argument('--epsilon-decay', default=True, action='store_true',
                     help='linear epsilon decay to zero')
 parser.add_argument('--weight-num', type=int, default=1, metavar='WN',
                     help='number of sampled weights per iteration')
@@ -147,9 +148,9 @@ def update_ccs(S, corWs, new_value):
 
 
 def train(env, agent, args):
-    monitor = Monitor(train=True, spec="-{}".format(args.method))
-    monitor.init_log(args.log, "roi_m.{}_e.{}_n.{}".format(args.model, args.env_name, args.name))
-    env.reset()
+    # monitor = Monitor(train=True, spec="-{}".format(args.method))
+    # monitor.init_log(args.log, "roi_m.{}_e.{}_n.{}".format(args.model, args.env_name, args.name))
+    # env.reset()
 
     S = set()
 
@@ -181,39 +182,55 @@ def train(env, agent, args):
         print(colored("solve for w: {}".format(corner_w), "green"))
 
         for num_eps in range(int(args.episode_num / args.ws)):
+            index_random_data = random.randint(0,env.x_train.shape[0]-1)
+            seq = env.x_train[index_random_data]
+            seq_label = env.y_train[index_random_data]
+            env.reset(seq,seq_label)
+            
+            
             terminal = False
-            env.reset()
             loss = 0
             cnt = 0
             tot_reward = 0
-
             tot_reward_mo = 0
+            timestep = 1 #time_to_begin
 
             probe = None
             if args.env_name == "dst":
                 probe = corner_w
             elif args.env_name in ['ft', 'ft5', 'ft7']:
                 probe = FloatTensor([0.8, 0.2, 0.0, 0.0, 0.0, 0.0])
+            elif args.env_name == "mooc":
+                probe = corner_w
 
-            while not terminal:
-                state = env.observe()
-                action = agent.act(state, corner_w)
+            while not terminal and timestep <= env.x_train.shape[1]:
+                state = env.get_sequence_state(timestep) ## (35, 22)
+                action = agent.act(state, timestep, corner_w)
                 agent.w_kept = corner_w
-                next_state, reward, terminal = env.step(action)
-                if args.log:
-                    monitor.add_log(state, action, reward, terminal, agent.w_kept)
+                next_timestep, reward, terminal = env.step(action)
+                next_state = env.get_sequence_state(next_timestep)
+                # if args.log:
+                #     monitor.add_log(state, action, reward, terminal, agent.w_kept)
                 agent.memorize(state, action, next_state, reward, terminal, roi=True)
-                loss += agent.learn(corner_w)
-                if cnt > 100:
+                
+                # loss += agent.learn(corner_w)
+
+                if timestep > 35:
                     terminal = True
                     agent.reset()
+
                 tot_reward = tot_reward + (probe.cpu().numpy().dot(reward)) * np.power(args.gamma, cnt)
 
                 tot_reward_mo = tot_reward_mo + reward * np.power(args.gamma, cnt)
 
-                cnt = cnt + 1
-
-            _, q = agent.predict(probe)
+                # cnt = cnt + 1
+                timestep += 1
+            
+            loss += agent.learn(corner_w) ## 指定最优preference
+            # loss += agent.learn() ## preference=None, w_batch随机生成,会遍历所有的prefernece
+           
+            # _, q = agent.predict(probe)
+            _, q = agent.predict(state, probe)
 
             if args.env_name == "dst":
                 act_1 = q[0, 3]
@@ -221,31 +238,58 @@ def train(env, agent, args):
             elif args.env_name in ['ft', 'ft5', 'ft7']:
                 act_1 = q[0, 1]
                 act_2 = q[0, 0]
+            elif args.env_name == "mooc":
+                act_0 = q[0, 0]
+                act_1 = q[0, 1]
+                act_2 = q[0, 2]
 
             if args.method == "crl-naive":
+                act_0 = act_0.data.cpu()
                 act_1 = act_1.data.cpu()
                 act_2 = act_2.data.cpu()
             elif args.method == "crl-envelope":
+                act_0 = probe.dot(act_0.data)
                 act_1 = probe.dot(act_1.data)
                 act_2 = probe.dot(act_2.data)
             elif args.method == "crl-energy":
                 act_1 = probe.dot(act_1.data)
                 act_2 = probe.dot(act_2.data)
-            print("end of eps %d with total reward (1) %0.2f (%0.2f, %0.2f), the Q is %0.2f | %0.2f; loss: %0.4f" % (
-                num_eps,
-                tot_reward,
-                tot_reward_mo[0],
-                tot_reward_mo[1],
-                act_1,
-                act_2,
-                # q__max,
-                loss / cnt))
-            monitor.update(num_eps,
-                           tot_reward,
-                           act_1,
-                           act_2,
-                           #    q__max,
-                           loss / cnt)
+            
+
+            # print("end of eps %d with total reward (1) %0.2f (%0.2f, %0.2f), the Q is %0.2f | %0.2f; loss: %0.4f" % (
+            #     num_eps,
+            #     tot_reward,
+            #     tot_reward_mo[0],
+            #     tot_reward_mo[1],
+            #     act_0,
+            #     act_1,
+            #     act_2,
+            #     # q__max,
+            #     loss / timestep))
+
+            # monitor.update(num_eps,
+            #                tot_reward,
+            #                act_0, 
+            #                act_1,
+            #                act_2,
+            #                #    q__max,
+            #                loss / cnt)
+
+
+            ## TODO: 评估部分
+            if(num_eps%20==0):
+                print("Episode {}".format(num_eps))
+            if num_eps % 100==0 and num_eps != 0:
+                acc,res,t = agent.compute_acc_batched(env,probe) ##相当于agent.predict()
+                harmonic_mean_train = agent.harmonic_mean(acc,t)
+
+                print("acc_train {} ======> average_time_train {}% ======> update {}".format(acc, np.round(100.*t, 3), agent.update_number))
+                print("harmonic_mean_train {} ".format(harmonic_mean_train))
+
+                # acc_val,res_val,t_val = agent.compute_acc_val_batched(env,probe)
+                # harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
+                # print("acc_val {} ======> average_time_val {}% ======> update {}".format(acc_val, np.round(100.*t_val, 3), agent.update_number))  
+                # print("harmonic_mean_val {} ".format(harmonic_mean_val))
 
 
         # agent.is_train=False
@@ -253,11 +297,11 @@ def train(env, agent, args):
         env.reset()
         cnt = 0
         tot_reward_mo = 0
-        while not terminal:
-            state = env.observe()
-            action = agent.act(state, corner_w)
+        while not terminal and timestep <= env.x_train.shape[1]:
+            state = env.get_sequence_state(timestep)
+            action = agent.act(state, timestep, corner_w)
             agent.w_kept = corner_w
-            next_state, reward, terminal = env.step(action)
+            next_state, reward, terminal = env.step(next_timestep)
             if cnt > 100:
                 terminal = True
                 agent.reset()
@@ -265,7 +309,7 @@ def train(env, agent, args):
             cnt = cnt + 1
         agent.is_train=True
 
-        S, corWs = update_ccs(S, corWs, tot_reward_mo)
+        S, corWs = update_ccs(S, corWs, tot_reward_mo) ## 用tot_reward_mo更新corWs
 
         print(colored("----------------\n", "red"))
         print(colored("Current S contains", "red"))
@@ -285,9 +329,11 @@ if __name__ == '__main__':
     env = MultiObjectiveEnv(args.env_name)
 
     # get state / action / reward sizes
-    state_size = len(env.state_spec)
-    action_size = env.action_spec[2][1] - env.action_spec[2][0]
-    reward_size = len(env.reward_spec)
+    # state_size = len(env.state_spec)
+    # action_size = env.action_spec[2][1] - env.action_spec[2][0]
+    state_size = env.state_size ## 35
+    action_size = env.action_size ## 3
+    reward_size = len(env.reward_spec) ## 2
 
     # generate an agent for initial training
     agent = None
