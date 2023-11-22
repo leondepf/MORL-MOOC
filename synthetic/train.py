@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 import torch
 import random
+import os
 from utils.monitor import Monitor
 from envs.mo_env import MultiObjectiveEnv
 
@@ -97,7 +98,7 @@ def train(env, agent, args):
             ## agent.remember(state, action, reward, next_state, terminal)
             
             ## 相当于 agent.replay()
-            # loss += agent.learn()  ## 一次iteration
+            loss += agent.learn()  ## 一次iteration
 
             ## TODO：这个if应该可以删掉
             if timestep > 35:
@@ -108,7 +109,7 @@ def train(env, agent, args):
             ## 这个tot_reward是否要挪到while循环之外？
             timestep += 1
         
-        loss += agent.learn() ## 可能会有问题
+        # loss += agent.learn() ## 可能会有问题
         # print("loss: %0.4f" %loss)
 
         # ## TODO: 传入state参数是否正确？这个state是哪一个timestep的state？
@@ -158,13 +159,13 @@ def train(env, agent, args):
         ## 评估部分
         ## TODO: 改为iteration对100取余, 可以在train的过程中进行评估
         ## 这一部分是放在episode循环之内，还是放在外面也无影响？-> 无影响
-        if agent.update_count % 1000 == 0:
+        if (agent.update_count+1) % 100 == 0:  ##如果不加1，则agent.update_count为0时也会进行评估
             # acc,res,t = agent.compute_acc_batched(env,probe)
             # harmonic_mean_train = agent.harmonic_mean(acc,t)
             # print("acc_train {} ======> average_time_train {}% ======> update {}".format(acc, np.round(100.*t, 3), agent.update_number))
             acc_val,res_val,t_val = agent.compute_acc_val_batched(env,probe)
             harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
-            print("iteration {} : acc_val {} , average_time_val {}%, harmonic_mean_val {} ".format(agent.update_count, acc_val, np.round(100.*t_val, 3), harmonic_mean_val))  
+            print("iteration {} : acc_val={} , average_time_val={}%, harmonic_mean_val={} ".format((agent.update_count+1), acc_val, np.round(100.*t_val, 3), harmonic_mean_val))  
         
         # if(num_eps%20==0):
         #     print("Episode {}".format(num_eps))
@@ -185,6 +186,7 @@ def train(env, agent, args):
 
 
 if __name__ == '__main__':
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     args = parser.parse_args()
 
     # setup the environment

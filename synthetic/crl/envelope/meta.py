@@ -219,7 +219,7 @@ class MetaAgent(object):
     def learn(self, preference=None):
 
         if len(self.trans_mem) > self.batch_size:
-
+            # print(len(self.trans_mem), self.update_count, self.batch_size)
             action_size = self.model_.action_size
             reward_size = self.model_.reward_size
 
