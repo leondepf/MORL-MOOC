@@ -108,6 +108,17 @@ def train(env, agent, args):
             tot_reward = tot_reward + (probe.cpu().numpy().dot(reward)) * np.power(args.gamma, timestep)
             ## 这个tot_reward是否要挪到while循环之外？
             timestep += 1
+
+            ## 评估部分
+            ## TODO: 改为iteration对100取余, 可以在train的过程中进行评估
+            if (agent.update_count+1) % 100 == 0:  ##如果不加1，则agent.update_count为0时也会进行评估
+            # acc,res,t = agent.compute_acc_batched(env,probe)
+            # harmonic_mean_train = agent.harmonic_mean(acc,t)
+            # print("acc_train {} ======> average_time_train {}% ======> update {}".format(acc, np.round(100.*t, 3), agent.update_number))
+                acc_val,res_val,t_val = agent.compute_acc_val_batched(env,probe)
+                harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
+                print("iteration {} : acc_val={} , average_time_val={}%, harmonic_mean_val={} ".format((agent.update_count+1), acc_val, np.round(100.*t_val, 3), harmonic_mean_val))  
+
         
         # loss += agent.learn() ## 可能会有问题
         # print("loss: %0.4f" %loss)
@@ -156,16 +167,6 @@ def train(env, agent, args):
         #                loss / timestep)  ## 最后一个可以换为loss
 
         
-        ## 评估部分
-        ## TODO: 改为iteration对100取余, 可以在train的过程中进行评估
-        ## 这一部分是放在episode循环之内，还是放在外面也无影响？-> 无影响
-        if (agent.update_count+1) % 100 == 0:  ##如果不加1，则agent.update_count为0时也会进行评估
-            # acc,res,t = agent.compute_acc_batched(env,probe)
-            # harmonic_mean_train = agent.harmonic_mean(acc,t)
-            # print("acc_train {} ======> average_time_train {}% ======> update {}".format(acc, np.round(100.*t, 3), agent.update_number))
-            acc_val,res_val,t_val = agent.compute_acc_val_batched(env,probe)
-            harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
-            print("iteration {} : acc_val={} , average_time_val={}%, harmonic_mean_val={} ".format((agent.update_count+1), acc_val, np.round(100.*t_val, 3), harmonic_mean_val))  
         
         # if(num_eps%20==0):
         #     print("Episode {}".format(num_eps))

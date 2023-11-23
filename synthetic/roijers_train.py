@@ -187,7 +187,6 @@ def train(env, agent, args):
             seq_label = env.y_train[index_random_data]
             env.reset(seq,seq_label)
             
-            
             terminal = False
             loss = 0
             cnt = 0
@@ -230,30 +229,30 @@ def train(env, agent, args):
             # loss += agent.learn() ## preference=None, w_batch随机生成,会遍历所有的prefernece
            
             # _, q = agent.predict(probe)
-            _, q = agent.predict(state, probe)
+            # _, q = agent.predict(state, probe)
 
-            if args.env_name == "dst":
-                act_1 = q[0, 3]
-                act_2 = q[0, 1]
-            elif args.env_name in ['ft', 'ft5', 'ft7']:
-                act_1 = q[0, 1]
-                act_2 = q[0, 0]
-            elif args.env_name == "mooc":
-                act_0 = q[0, 0]
-                act_1 = q[0, 1]
-                act_2 = q[0, 2]
+            # if args.env_name == "dst":
+            #     act_1 = q[0, 3]
+            #     act_2 = q[0, 1]
+            # elif args.env_name in ['ft', 'ft5', 'ft7']:
+            #     act_1 = q[0, 1]
+            #     act_2 = q[0, 0]
+            # elif args.env_name == "mooc":
+            #     act_0 = q[0, 0]
+            #     act_1 = q[0, 1]
+            #     act_2 = q[0, 2]
 
-            if args.method == "crl-naive":
-                act_0 = act_0.data.cpu()
-                act_1 = act_1.data.cpu()
-                act_2 = act_2.data.cpu()
-            elif args.method == "crl-envelope":
-                act_0 = probe.dot(act_0.data)
-                act_1 = probe.dot(act_1.data)
-                act_2 = probe.dot(act_2.data)
-            elif args.method == "crl-energy":
-                act_1 = probe.dot(act_1.data)
-                act_2 = probe.dot(act_2.data)
+            # if args.method == "crl-naive":
+            #     act_0 = act_0.data.cpu()
+            #     act_1 = act_1.data.cpu()
+            #     act_2 = act_2.data.cpu()
+            # elif args.method == "crl-envelope":
+            #     act_0 = probe.dot(act_0.data)
+            #     act_1 = probe.dot(act_1.data)
+            #     act_2 = probe.dot(act_2.data)
+            # elif args.method == "crl-energy":
+            #     act_1 = probe.dot(act_1.data)
+            #     act_2 = probe.dot(act_2.data)
             
 
             # print("end of eps %d with total reward (1) %0.2f (%0.2f, %0.2f), the Q is %0.2f | %0.2f; loss: %0.4f" % (
@@ -277,20 +276,23 @@ def train(env, agent, args):
 
 
             ## TODO: 评估部分
-            if(num_eps%20==0):
-                print("Episode {}".format(num_eps))
-            if num_eps % 100==0 and num_eps != 0:
-                acc,res,t = agent.compute_acc_batched(env,probe) ##相当于agent.predict()
-                harmonic_mean_train = agent.harmonic_mean(acc,t)
+            # if(num_eps%20==0):
+            #     print("Episode {}".format(num_eps))
+            # if num_eps % 100==0 and num_eps != 0:
+            #     acc,res,t = agent.compute_acc_batched(env,probe) ##相当于agent.predict()
+            #     harmonic_mean_train = agent.harmonic_mean(acc,t)
 
-                print("acc_train {} ======> average_time_train {}% ======> update {}".format(acc, np.round(100.*t, 3), agent.update_number))
-                print("harmonic_mean_train {} ".format(harmonic_mean_train))
+            #     print("acc_train {} ======> average_time_train {}% ======> update {}".format(acc, np.round(100.*t, 3), agent.update_number))
+            #     print("harmonic_mean_train {} ".format(harmonic_mean_train))
 
-                # acc_val,res_val,t_val = agent.compute_acc_val_batched(env,probe)
-                # harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
-                # print("acc_val {} ======> average_time_val {}% ======> update {}".format(acc_val, np.round(100.*t_val, 3), agent.update_number))  
-                # print("harmonic_mean_val {} ".format(harmonic_mean_val))
-
+            #     # acc_val,res_val,t_val = agent.compute_acc_val_batched(env,probe)
+            #     # harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
+            #     # print("acc_val {} ======> average_time_val {}% ======> update {}".format(acc_val, np.round(100.*t_val, 3), agent.update_number))  
+            #     # print("harmonic_mean_val {} ".format(harmonic_mean_val))
+            if (agent.update_count+1) % 100 == 0:  ##如果不加1，则agent.update_count为0时也会进行评估
+                acc_val,res_val,t_val = agent.compute_acc_val_batched(env,probe)
+                harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
+                print("iteration {} : acc_val={} , average_time_val={}%, harmonic_mean_val={} ".format((agent.update_count+1), acc_val, np.round(100.*t_val, 3), harmonic_mean_val))  
 
         # agent.is_train=False
         terminal = False

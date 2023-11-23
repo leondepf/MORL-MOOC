@@ -29,8 +29,8 @@ class MetaAgent(object):
     '''
 
     def __init__(self, model, args, is_train=False):
-        self.model = copy.deepcopy(model)
         self.model_ = model
+        self.model = copy.deepcopy(model)
         self.is_train = is_train
         self.gamma = args.gamma
         self.epsilon = args.epsilon  ## 探索率
@@ -98,6 +98,8 @@ class MetaAgent(object):
                 self.w_kept = (torch.abs(self.w_kept) / \
                             torch.norm(self.w_kept, p=1)).type(FloatTensor)
             preference = self.w_kept
+        else:
+            self.w_kept = preference 
         state = torch.from_numpy(state).type(FloatTensor) ## state.shape = (35, 22)
 
         ##TODO：检查这里的输入输出shape
@@ -142,11 +144,10 @@ class MetaAgent(object):
             terminal))  # terminal True/False
 
         ##TODO:从这里开始检查输入输出的shape
-        # randomly produce a preference for calculating priority
         if roi: 
             preference = self.w_kept
-        else:
-            preference = torch.randn(self.model_.reward_size)
+        else: 
+            preference = torch.randn(self.model_.reward_size)  # randomly produce a preference for calculating priority
             preference = (torch.abs(preference) / torch.norm(preference, p=1)).type(FloatTensor)
         
         state = torch.from_numpy(state).type(FloatTensor)
@@ -187,14 +188,6 @@ class MetaAgent(object):
         if len(self.trans_mem) > self.mem_size:
             self.trans_mem.popleft()
             self.priority_mem.popleft()
-
-    def remember(self, state, action, reward, next_state, done):
-        if action == 0:  
-            self.memory_0.append((state, action, reward, next_state, done))
-        if action == 1:
-            self.memory_1.append((state, action, reward, next_state, done))
-        if action == 2 :
-            self.memory_2.append((state, action, reward, next_state, done))
 
     def sample(self, pop, pri, k):
         pri = np.array(pri).astype(np.float)
@@ -241,16 +234,17 @@ class MetaAgent(object):
                           np.linalg.norm(w_batch, ord=1, axis=1, keepdims=True)
                 w_batch = torch.from_numpy(w_batch.repeat(self.batch_size, axis=0)).type(FloatTensor)
             else:
-                w_batch = preference.cpu().numpy()
-                w_batch = np.expand_dims(w_batch, axis=0)
+                w_batch = preference.cpu().numpy() ## (2,)
+                w_batch = np.expand_dims(w_batch, axis=0) ## (1,2)
+                w_batch = w_batch.repeat(self.weight_num,axis=0)
                 w_batch = np.abs(w_batch) / \
-                          np.linalg.norm(w_batch, ord=1, axis=1, keepdims=True)
+                          np.linalg.norm(w_batch, ord=1, axis=1, keepdims=True) ## (32,2)
                 w_batch = torch.from_numpy(w_batch.repeat(self.batch_size, axis=0)).type(FloatTensor)
             
 
 
-            __, Q = self.model_(Variable(torch.cat(state_batch, dim=0)),
-                                Variable(w_batch), w_num=self.weight_num)
+            __, Q = self.model_(Variable(torch.cat(state_batch, dim=0)),  ## torch.Size([1024, 30, 7])
+                                Variable(w_batch), w_num=self.weight_num) ## torch.Size([32, 2])
 
             # detach since we don't want gradients to propagate
             # HQ, _    = self.model_(Variable(torch.cat(next_state_batch, dim=0), volatile=True),
