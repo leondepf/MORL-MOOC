@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 import torch
 import random
+import os
 from utils.monitor import Monitor
 from envs.mo_env import MultiObjectiveEnv
 
@@ -150,7 +151,7 @@ def update_ccs(S, corWs, new_value):
 def train(env, agent, args):
     # monitor = Monitor(train=True, spec="-{}".format(args.method))
     # monitor.init_log(args.log, "roi_m.{}_e.{}_n.{}".format(args.model, args.env_name, args.name))
-    # env.reset()
+    # env.reset()  ##TODO：需要把reset加回来
 
     S = set()
 
@@ -183,8 +184,8 @@ def train(env, agent, args):
 
         for num_eps in range(int(args.episode_num / args.ws)):
             index_random_data = random.randint(0,env.x_train.shape[0]-1)
-            seq = env.x_train[index_random_data]
-            seq_label = env.y_train[index_random_data]
+            seq = env.x_train[index_random_data]  ##TODO: 需要将这个seq传递到后面，使得后面的env.reset()可用
+            seq_label = env.y_train[index_random_data]  ##TODO：train函数包装成类？然后用self.seq和self.seq_label?
             env.reset(seq,seq_label)
             
             terminal = False
@@ -212,9 +213,9 @@ def train(env, agent, args):
                 #     monitor.add_log(state, action, reward, terminal, agent.w_kept)
                 agent.memorize(state, action, next_state, reward, terminal, roi=True)
                 
-                # loss += agent.learn(corner_w)
+                loss += agent.learn(corner_w)
 
-                if timestep > 35:
+                if timestep > 35: ## KDD:30, XuetangX:35
                     terminal = True
                     agent.reset()
 
@@ -224,8 +225,14 @@ def train(env, agent, args):
 
                 # cnt = cnt + 1
                 timestep += 1
+
+                ## TODO: 评估部分
+                if (agent.update_count+1) % 100 == 0:  ##如果不加1，则agent.update_count为0时也会进行评估
+                    acc_val,res_val,t_val = agent.compute_acc_val_batched(env,probe)
+                    harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
+                    print("iteration {} : acc_val={} , average_time_val={}%, harmonic_mean_val={} ".format((agent.update_count+1), acc_val, np.round(100.*t_val, 3), harmonic_mean_val))  
             
-            loss += agent.learn(corner_w) ## 指定最优preference
+            # loss += agent.learn(corner_w) ## 指定最优preference
             # loss += agent.learn() ## preference=None, w_batch随机生成,会遍历所有的prefernece
            
             # _, q = agent.predict(probe)
@@ -275,28 +282,10 @@ def train(env, agent, args):
             #                loss / cnt)
 
 
-            ## TODO: 评估部分
-            # if(num_eps%20==0):
-            #     print("Episode {}".format(num_eps))
-            # if num_eps % 100==0 and num_eps != 0:
-            #     acc,res,t = agent.compute_acc_batched(env,probe) ##相当于agent.predict()
-            #     harmonic_mean_train = agent.harmonic_mean(acc,t)
-
-            #     print("acc_train {} ======> average_time_train {}% ======> update {}".format(acc, np.round(100.*t, 3), agent.update_number))
-            #     print("harmonic_mean_train {} ".format(harmonic_mean_train))
-
-            #     # acc_val,res_val,t_val = agent.compute_acc_val_batched(env,probe)
-            #     # harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
-            #     # print("acc_val {} ======> average_time_val {}% ======> update {}".format(acc_val, np.round(100.*t_val, 3), agent.update_number))  
-            #     # print("harmonic_mean_val {} ".format(harmonic_mean_val))
-            if (agent.update_count+1) % 100 == 0:  ##如果不加1，则agent.update_count为0时也会进行评估
-                acc_val,res_val,t_val = agent.compute_acc_val_batched(env,probe)
-                harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
-                print("iteration {} : acc_val={} , average_time_val={}%, harmonic_mean_val={} ".format((agent.update_count+1), acc_val, np.round(100.*t_val, 3), harmonic_mean_val))  
-
+        ## 当所有episode结束之后
         # agent.is_train=False
         terminal = False
-        env.reset()
+        # env.reset()  ##TODO：这个reset需要补上
         cnt = 0
         tot_reward_mo = 0
         while not terminal and timestep <= env.x_train.shape[1]:
@@ -304,14 +293,14 @@ def train(env, agent, args):
             action = agent.act(state, timestep, corner_w)
             agent.w_kept = corner_w
             next_state, reward, terminal = env.step(next_timestep)
-            if cnt > 100:
+            if cnt > 35:
                 terminal = True
                 agent.reset()
             tot_reward_mo = tot_reward_mo + reward * np.power(args.gamma, cnt)
             cnt = cnt + 1
         agent.is_train=True
 
-        S, corWs = update_ccs(S, corWs, tot_reward_mo) ## 用tot_reward_mo更新corWs
+        S, corWs = update_ccs(S, corWs, tot_reward_mo) ## 用tot_reward_mo更新corWs -> 需要观察tot_reward_mo
 
         print(colored("----------------\n", "red"))
         print(colored("Current S contains", "red"))
@@ -326,6 +315,8 @@ def train(env, agent, args):
 
 if __name__ == '__main__':
     args = parser.parse_args()
+
+    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
     # setup the environment
     env = MultiObjectiveEnv(args.env_name)

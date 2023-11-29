@@ -35,7 +35,7 @@ class MetaAgent(object):
         self.gamma = args.gamma
         self.epsilon = args.epsilon  ## 探索率
         self.epsilon_decay = args.epsilon_decay  ## 探索率衰减，True/False
-        self.epsilon_min    = 0.01
+        self.epsilon_min    = 0.05
         self.epsilon_delta = (args.epsilon - self.epsilon_min) / args.episode_num
         
         
@@ -81,8 +81,8 @@ class MetaAgent(object):
             self.model.cuda()
             self.model_.cuda()
 
-        self.state_size        = 30 ## KDD2015 Dataset
-        # self.state_size        = 35 ## XuetangX Dataset
+        # self.state_size        = 30 ## KDD2015 Dataset
+        self.state_size        = 35 ## XuetangX Dataset
         self.action_size       = 3
 
 
@@ -236,7 +236,7 @@ class MetaAgent(object):
             else:
                 w_batch = preference.cpu().numpy() ## (2,)
                 w_batch = np.expand_dims(w_batch, axis=0) ## (1,2)
-                w_batch = w_batch.repeat(self.weight_num,axis=0)
+                w_batch = w_batch.repeat(self.weight_num,axis=0) ## (32,2)
                 w_batch = np.abs(w_batch) / \
                           np.linalg.norm(w_batch, ord=1, axis=1, keepdims=True) ## (32,2)
                 w_batch = torch.from_numpy(w_batch.repeat(self.batch_size, axis=0)).type(FloatTensor)

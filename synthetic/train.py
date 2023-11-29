@@ -80,7 +80,8 @@ def train(env, agent, args):
         elif args.env_name in ['ft', 'ft5', 'ft7']:
             probe = FloatTensor([0.8, 0.2, 0.0, 0.0, 0.0, 0.0])
         elif args.env_name == "mooc":
-            probe = FloatTensor([0.3, 0.7]) ## 可调
+            # probe = FloatTensor([0.3, 0.7]) ## 可调 -> 不参与训练，对实际结果无影响
+            probe = FloatTensor([0.4, 0.6]) ## 可调
 
         while not terminal and timestep <= env.x_train.shape[1]:
             state = env.get_sequence_state(timestep) ## (35, 22)

@@ -23,7 +23,8 @@ class MOOC_Env():
         self.timestep = 1 ##当前时间步,并不是强化学习中的状态
         self.done = False
         ## TODO: 这个reward可能需要调整
-        self.reward = [[0, 1], [1, 0]]
+        # self.reward = [[0, 1], [1, 0]]  ##为什么是二维的？
+        self.reward = [0, 0]
         self.param_lambda = 0.001
         self.param_p = 1/3
 
@@ -32,8 +33,8 @@ class MOOC_Env():
         if action == 0:  ## wait
             if not self.done and self.timestep < len(self.sequence["data"]):
                 acc_reward = 0
-                time_penalty = -(self.param_lambda * (self.timestep ** self.param_p)) ## timestep越大，时间奖励越小
-                self.reward = np.array([acc_reward, time_penalty])
+                time_reward = -(self.param_lambda * (self.timestep ** self.param_p)) ## timestep越大，时间奖励越小
+                self.reward = np.array([acc_reward, time_reward])
                 self.timestep = self.timestep + 1 ##时间步加1，即进入下一个时间步
                 
         if action == 1: ## predict, real_label=0
@@ -41,15 +42,15 @@ class MOOC_Env():
                 # if self.sequence["label"] == 1:
                 if self.sequence["label"]+1 == 1: ## 等号后面的1代表action
                     acc_reward = 1
-                    # time_penalty = 1.0 / self.timestep
-                    # time_penalty = 1.0 
-                    time_penalty = 0 
-                    self.reward = np.array([acc_reward, time_penalty])
+                    # time_reward = 1.0 / self.timestep
+                    time_reward = 1.0 
+                    # time_reward = 0 
+                    self.reward = np.array([acc_reward, time_reward])
                 else:
                     acc_reward = -1
-                    # time_penalty = 1.0 
-                    time_penalty = 0 
-                    self.reward = np.array([acc_reward, time_penalty])
+                    time_reward = 1.0 
+                    # time_reward = 0 
+                    self.reward = np.array([acc_reward, time_reward])
             self.done = True
    
         if action == 2:  ## predict, real_label=1
@@ -57,14 +58,14 @@ class MOOC_Env():
                 # if self.sequence["label"] == 2:
                 if self.sequence["label"]+1 == 2:  ## 等号后面的2代表action
                     acc_reward = 1
-                    # time_penalty = 1.0 
-                    time_penalty = 0 
-                    self.reward = np.array([acc_reward, time_penalty])
+                    time_reward = 1.0 
+                    # time_reward = 0 
+                    self.reward = np.array([acc_reward, time_reward])
                 else:
                     acc_reward = -1
-                    # time_penalty = 1.0  
-                    time_penalty = 0 
-                    self.reward = np.array([acc_reward, time_penalty])
+                    time_reward = 1.0  
+                    # time_reward = 0 
+                    self.reward = np.array([acc_reward, time_reward])
             self.done = True
      
         return self.timestep, self.reward, self.done
