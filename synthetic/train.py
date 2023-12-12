@@ -102,7 +102,7 @@ def train(env, agent, args):
             loss += agent.learn()  ## 一次iteration
 
             ## TODO：这个if应该可以删掉
-            if timestep > 35:
+            if timestep > 30: ## KDD：30；XuetangX：35
                 terminal = True
                 agent.reset()
 
@@ -112,7 +112,7 @@ def train(env, agent, args):
 
             ## 评估部分
             ## TODO: 改为iteration对10取余, 可以在train的过程中进行评估
-            if (agent.update_count+1) % 10 == 0:  ##如果不加1，则agent.update_count为0时也会进行评估
+            if (agent.update_count+1) % 100 == 0:  ##如果不加1，则agent.update_count为0时也会进行评估
                 # acc,res,t = agent.compute_acc_batched(env,probe)
                 # harmonic_mean_train = agent.harmonic_mean(acc,t)
                 # print("acc_train {} ======> average_time_train {}% ======> update {}".format(acc, np.round(100.*t, 3), agent.update_number))
@@ -167,21 +167,17 @@ def train(env, agent, args):
         #                #    q__max,
         #                loss / timestep)  ## 最后一个可以换为loss
 
+        ## 评估部分
+        ## TODO: 改为iteration对10取余, 可以在train的过程中进行评估
+        # if (agent.update_count+1) % 10 == 0:  ##如果不加1，则agent.update_count为0时也会进行评估
+        #     # acc,res,t = agent.compute_acc_batched(env,probe)
+        #     # harmonic_mean_train = agent.harmonic_mean(acc,t)
+        #     # print("acc_train {} ======> average_time_train {}% ======> update {}".format(acc, np.round(100.*t, 3), agent.update_number))
+        #     acc_val,res_val,t_val = agent.compute_acc_val_batched(env,probe)
+        #     harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
+        #     print("iteration {} : acc_val={} , average_time_val={}%, harmonic_mean_val={} ".format((agent.update_count+1), acc_val, np.round(100.*t_val, 3), harmonic_mean_val))  
         
         
-        # if(num_eps%20==0):
-        #     print("Episode {}".format(num_eps))
-        # if num_eps % 100==0 and num_eps != 0:
-        #     acc,res,t = agent.compute_acc_batched(env,probe) ##相当于agent.predict()
-        #     harmonic_mean_train = agent.harmonic_mean(acc,t)
-
-        #     print("acc_train {} ======> average_time_train {}% ======> update {}".format(acc, np.round(100.*t, 3), agent.update_number))
-        #     print("harmonic_mean_train {} ".format(harmonic_mean_train))
-
-            # acc_val,res_val,t_val = agent.compute_acc_val_batched(env,probe)
-            # harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
-            # print("acc_val {} ======> average_time_val {}% ======> update {}".format(acc_val, np.round(100.*t_val, 3), agent.update_number))  
-            # print("harmonic_mean_val {} ".format(harmonic_mean_val))
             
     
     agent.save(args.save, "m.{}_e.{}_n.{}".format(args.model, args.env_name, args.name))

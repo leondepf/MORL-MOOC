@@ -227,10 +227,10 @@ def train(env, agent, args):
                 timestep += 1
 
                 ## TODO: 评估部分
-                if (agent.update_count+1) % 100 == 0:  ##如果不加1，则agent.update_count为0时也会进行评估
+                if (agent.update_count+1) % 10 == 0:  ##如果不加1，则agent.update_count为0时也会进行评估
                     acc_val,res_val,t_val = agent.compute_acc_val_batched(env,probe)
                     harmonic_mean_val = agent.harmonic_mean(acc_val,t_val)
-                    print("iteration {} : acc_val={} , average_time_val={}%, harmonic_mean_val={} ".format((agent.update_count+1), acc_val, np.round(100.*t_val, 3), harmonic_mean_val))  
+                    print("iteration {} : acc_val={} , average_time_val={}%, harmonic_mean_val={} ".format((agent.update_count+1)*10, acc_val, np.round(100.*t_val, 3), harmonic_mean_val))  
             
             # loss += agent.learn(corner_w) ## 指定最优preference
             # loss += agent.learn() ## preference=None, w_batch随机生成,会遍历所有的prefernece
@@ -285,7 +285,14 @@ def train(env, agent, args):
         ## 当所有episode结束之后
         # agent.is_train=False
         terminal = False
+        
+        agent.reset()
         # env.reset()  ##TODO：这个reset需要补上
+        index_random_data = random.randint(0,env.x_train.shape[0]-1)
+        seq = env.x_train[index_random_data]  ##TODO: 需要将这个seq传递到后面，使得后面的env.reset()可用
+        seq_label = env.y_train[index_random_data]  ##TODO：train函数包装成类？然后用self.seq和self.seq_label?
+        env.reset(seq,seq_label)
+
         cnt = 0
         tot_reward_mo = 0
         while not terminal and timestep <= env.x_train.shape[1]:

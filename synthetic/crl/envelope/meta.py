@@ -81,8 +81,8 @@ class MetaAgent(object):
             self.model.cuda()
             self.model_.cuda()
 
-        # self.state_size        = 30 ## KDD2015 Dataset
-        self.state_size        = 35 ## XuetangX Dataset
+        self.state_size        = 30 ## KDD2015 Dataset
+        # self.state_size        = 35 ## XuetangX Dataset
         self.action_size       = 3
 
 
@@ -427,6 +427,7 @@ class MetaAgent(object):
             probe_ = probe.unsqueeze(0) ## torch.Size([1, 2])
             probe_ = probe_.expand(env.x_test.shape[0], -1) ## torch.Size([15902, 2])
 
+            self.model.eval()
             _, batch_Q = self.model(Variable(FloatTensor(batch_state), requires_grad=False),
                           Variable(probe_, requires_grad=False))  ##batch_Q: (15902, 3, 2)
 
@@ -462,6 +463,7 @@ class MetaAgent(object):
                     t.append(i)
             i+=1 ##所有人都遍历完之后，timestep再加1
         # return count/len(self.x_test),tab,t
+        self.model.train()
         return count/len(env.x_test), tab, np.mean(t)/env.x_test.shape[1]
     
     def harmonic_mean(self, acc, earl):
